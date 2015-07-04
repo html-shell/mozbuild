@@ -121,7 +121,7 @@ class InternalBackend(VisualStudioBackend):
             #TODO: no handle this time
             pass
         elif isinstance(obj, JARManifest):
-            self._jar_manifests.add
+            self._jar_manifests.add(obj.path)
         elif isinstance(obj, TestHarnessFiles):
             self._process_test_harness_files(obj)
         elif isinstance(obj, ReaderSummary):
