@@ -44,6 +44,9 @@ from ..frontend.data import (
     JavaScriptModules,
     XPIDLFile,
     UnifiedSources,
+    HostSimpleProgram,
+    HostProgram,
+    HostLibrary,
 )
 
 def _get_attribute_with(v, k, default = {}):
@@ -72,6 +75,8 @@ class InternalBackend(VisualStudioBackend):
         self._js_preference_files = set()
         self._jar_manifests = set()
         self._cc_configs = {}
+        self._python_unit_tests = set()
+        self._garbages = set()
         self._install_manifests = {
             k: InstallManifest() for k in [
                 'dist_bin',
@@ -122,18 +127,38 @@ class InternalBackend(VisualStudioBackend):
         elif isinstance(obj, ReaderSummary):
             #No need to handle
             pass
+        elif isinstance(obj, HostSimpleProgram):
+            #TODO: no handle this time
+            pass
+        elif isinstance(obj, HostProgram):
+            #TODO: no handle this time
+            pass
         elif isinstance(obj, Program):
             #TODO: no handle this time
             pass
         elif isinstance(obj, SimpleProgram):
             #TODO: no handle this time
             pass
+        elif isinstance(obj, HostLibrary):
+            #TODO: no handle this time
+            pass
         elif isinstance(obj, FinalTargetFiles):
             self._process_final_target_files(obj, obj.files, obj.target)
         elif isinstance(obj, JavaScriptModules):
             self._process_javascript_modules(obj)
+        elif isinstance(obj, GeneratedInclude):
+            self._process_generated_include(obj)
         else:
             self.typeSet.add(obj.__class__.__name__)
+
+    def _process_generated_include(self, obj):
+        if obj.path.startswith('/'):
+            path = self.environment.topobjdir.replace('\\', '/') + obj.path
+        else:
+            path = os.path.join(obj.srcdir, obj.path)
+        path = os.path.normpath(path).replace('\\', '/')
+        srcdirConfig = _get_attribute_with(self._cc_configs, obj.srcdir)
+        _get_attribute_with(srcdirConfig, 'GENERATED_INCLUDES', []).append(path)
 
     def _walk_hierarchy(self, obj, element, namespace=''):
         """Walks the ``HierarchicalStringList`` ``element`` in the context of
@@ -213,6 +238,26 @@ class InternalBackend(VisualStudioBackend):
         return os.path.normpath(os.path.join(obj.srcdir, filename))
 
     def _process_variable_passthru(self, obj):
+        cc_flags = [
+            'DISABLE_STL_WRAPPING',
+            'VISIBILITY_FLAGS',
+            'RCINCLUDE',
+            'MSVC_ENABLE_PGO',
+            'DEFFILE',
+            'USE_STATIC_LIBS',
+            'MOZBUILD_CXXFLAGS',
+            'MOZBUILD_CFLAGS',
+            'NO_PROFILE_GUIDED_OPTIMIZE',
+            'WIN32_EXE_LDFLAGS',
+            'MOZBUILD_LDFLAGS',
+            'FAIL_ON_WARNINGS',
+            'EXTRA_COMPILE_FLAGS',
+            'RCFILE',
+            'RESFILE',
+            'NO_DIST_INSTALL',
+            'IS_GYP_DIR',
+        ]
+
         # Sorted so output is consistent and we don't bump mtimes.
         for k, v in sorted(obj.variables.items()):
             if k == 'EXTRA_COMPONENTS':
@@ -221,7 +266,13 @@ class InternalBackend(VisualStudioBackend):
             elif k == 'EXTRA_PP_COMPONENTS':
                 for f in v:
                     self._extra_pp_components.add(self._get_full_path(obj, f))
-            elif k in ['DISABLE_STL_WRAPPING', 'VISIBILITY_FLAGS', 'RCINCLUDE', 'MSVC_ENABLE_PGO', 'DEFFILE', 'USE_STATIC_LIBS']:
+            elif k == 'PYTHON_UNIT_TESTS':
+                for p in v:
+                    self._python_unit_tests.add(self._get_full_path(obj, p))
+            elif k == 'GARBAGE':
+                for p in v:
+                    self._garbages.add(self._get_full_path(obj, p))
+            elif k in cc_flags:
                 _get_attribute_with(self._cc_configs, obj.srcdir)[k] = v
             else:
                 print(k, v)
@@ -232,7 +283,9 @@ class InternalBackend(VisualStudioBackend):
 
     def consume_finished(self):
         CommonBackend.consume_finished(self)
-        #print(self.typeSet)
+        print(self.typeSet)
+        #self.print_list(self._garbages)
+        #self.print_list(self._python_unit_tests)
         #self.print_list(self.backend_input_files) # moz.build files
         #print(self._cc_configs)
         #self.print_list(self._extra_pp_components)
@@ -256,3 +309,13 @@ class InternalBackend(VisualStudioBackend):
     ):
         #TODO: not implemented yet
         pass
+
+    def _handle_webidl_build(self, bindings_dir, unified_source_mapping,
+                             webidls, expected_build_output_files,
+                             global_define_files):
+        include_dir = mozpath.join(self.environment.topobjdir, 'dist',
+            'include')
+        for f in expected_build_output_files:
+            if f.startswith(include_dir):
+                self._install_manifests['dist_include'].add_optional_exists(
+                    mozpath.relpath(f, include_dir))

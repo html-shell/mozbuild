@@ -13,7 +13,7 @@
     "Release": {
       "cmd": "{PROJECT_PATH}/../mozilla-build/python/python",
       "sh": false,
-      "args": [ "{PROJECT_PATH}/../../build/BoltBuild.py"]
+      "args": [ "{PROJECT_PATH}/../../build/BoltBuild.py", "build-backend"]
     }
   }
 }

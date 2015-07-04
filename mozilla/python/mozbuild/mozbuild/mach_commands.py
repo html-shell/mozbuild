@@ -581,7 +581,7 @@ class Build(MachCommandBase):
     @CommandArgument('-b', '--backend',
         choices=['RecursiveMake', 'AndroidEclipse', 'CppEclipse', 'VisualStudio', 'Internal'],
         default='Internal',
-        help='Which backend to build (default: RecursiveMake).')
+        help='Which backend to build (default: Internal).')
     def build_backend(self, backend='Internal', diff=False):
         python = self.virtualenv_manager.python_path
         config_status = os.path.join(self.topobjdir, 'config.status')
