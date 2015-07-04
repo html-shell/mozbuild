@@ -191,7 +191,7 @@ class CommonBackend(BuildBackend):
 
         elif isinstance(obj, XPIDLFile):
             self._idl_manager.register_idl(obj.source_path, obj.module,
-                obj.install_target)
+                obj.target)
 
         elif isinstance(obj, ConfigFileSubstitution):
             # Do not handle ConfigFileSubstitution for Makefiles. Leave that
