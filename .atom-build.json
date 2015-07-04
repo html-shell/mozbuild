@@ -1,9 +1,9 @@
 {
-  "cmd": "{PROJECT_PATH}/../mozilla-build/python/python",
+  "cmd": "{PROJECT_PATH}/../Release/_virtualenv/Scripts/python.exe",
   "name": "MozBuild",
-  "args": [ "{PROJECT_PATH}/../../build/BoltBuild.py", "build-backend"],
+  "args": [ "{PROJECT_PATH}/../Release/config.status", "--backend=Internal"],
   "sh": false,
-  "cwd": "{PROJECT_PATH}/../../",
+  "cwd": "{PROJECT_PATH}/../Release/",
   "env": {
     "VARIABLE1": "VALUE1",
     "VARIABLE2": "VALUE2"
@@ -13,7 +13,7 @@
     "Release": {
       "cmd": "{PROJECT_PATH}/../mozilla-build/python/python",
       "sh": false,
-      "args": [ "{PROJECT_PATH}/build/MozBuild.py"]
+      "args": [ "{PROJECT_PATH}/../../build/BoltBuild.py"]
     }
   }
 }

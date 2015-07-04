@@ -17,9 +17,16 @@ from mozpack.manifests import (
 )
 import mozpack.path as mozpath
 
-from .common import CommonBackend
+from .common import (
+    CommonBackend,
+    XPIDLManager,
+    TestManager,
+    WebIDLCollection
+)
+
 from .visualstudio import VisualStudioBackend
 from ..frontend.data import (
+    ContextDerived,
     GeneratedInclude,
     Exports,
     JsPreferenceFile,
@@ -35,32 +42,98 @@ from ..frontend.data import (
     Program,
     SimpleProgram,
     JavaScriptModules,
-    XPIDLFile
+    XPIDLFile,
+    UnifiedSources,
 )
+
+def _get_attribute_with(v, k, default = {}):
+    if not k in v:
+        v[k] = default
+    return v[k]
 
 class InternalBackend(VisualStudioBackend):
     def _init(self):
-        CommonBackend._init(self)
+
+        self._idl_manager = XPIDLManager(self.environment)
+        self._test_manager = TestManager(self.environment)
+        self._webidls = WebIDLCollection()
+        self._configs = set()
+        self._ipdl_sources = set()
         self._paths_to_sources = {}
         self._path_to_unified_sources = set();
         self._paths_to_includes = {}
         self._paths_to_defines = {}
         self._paths_to_configs = {}
         self._libs_to_paths = {}
+        self._paths_to_export = {}
+        self._extra_components = set()
+        self._extra_pp_components = set()
+        self._extra_pp_modules = set()
+        self._js_preference_files = set()
+        self._jar_manifests = set()
+        self._cc_configs = {}
+        self._install_manifests = {
+            k: InstallManifest() for k in [
+                'dist_bin',
+                'dist_idl',
+                'dist_include',
+                'dist_public',
+                'dist_private',
+                'dist_sdk',
+                'dist_xpi-stage',
+                'tests',
+                'xpidl',
+            ]}
 
         def detailed(summary):
-            return 'Building with internal backend'
+            return 'Building with internal backend finished.'
         self.summary.backend_detailed_summary = types.MethodType(detailed,
             self.summary)
         self.typeSet = set()
 
     def consume_object(self, obj):
-        # Just acknowledge everything.
+        handled = False
+        if isinstance(obj, ContextDerived):
+            handled = CommonBackend.consume_object(self, obj)
+        if handled and not isinstance(obj, UnifiedSources): #UnifiedSources should handled by visual studio
+            return
         handled = VisualStudioBackend.consume_object(self, obj)
         if handled:
             return
-        if isinstance(obj, Exports):
+        if isinstance(obj, DirectoryTraversal):
+            #No need to handle
+            pass
+        elif isinstance(obj, Exports):
             self._process_exports(obj, obj.exports)
+        elif isinstance(obj, GeneratedFile):
+            #TODO: no handle this time
+            pass
+        elif isinstance(obj, VariablePassthru):
+            self._process_variable_passthru(obj)
+        elif isinstance(obj, JsPreferenceFile):
+            self._js_preference_files.add(self._get_full_path(obj, obj.path))
+        elif isinstance(obj, ConfigFileSubstitution):
+            #TODO: no handle this time
+            pass
+        elif isinstance(obj, JARManifest):
+            self._jar_manifests.add
+        elif isinstance(obj, TestHarnessFiles):
+            self._process_test_harness_files(obj)
+        elif isinstance(obj, ReaderSummary):
+            #No need to handle
+            pass
+        elif isinstance(obj, Program):
+            #TODO: no handle this time
+            pass
+        elif isinstance(obj, SimpleProgram):
+            #TODO: no handle this time
+            pass
+        elif isinstance(obj, FinalTargetFiles):
+            self._process_final_target_files(obj, obj.files, obj.target)
+        elif isinstance(obj, JavaScriptModules):
+            self._process_javascript_modules(obj)
+        else:
+            self.typeSet.add(obj.__class__.__name__)
 
     def _walk_hierarchy(self, obj, element, namespace=''):
         """Walks the ``HierarchicalStringList`` ``element`` in the context of
@@ -80,9 +153,106 @@ class InternalBackend(VisualStudioBackend):
                 yield source, dest, strings.flags_for(s)
 
     def _process_exports(self, obj, exports):
-        for source, dest, y in self._walk_hierarchy(obj, exports):
-            print(source, dest, y)
+        for source, dest, _ in self._walk_hierarchy(obj, exports):
+            self._install_manifests['dist_include'].add_symlink(source, dest)
+
+            if not os.path.exists(source):
+                raise Exception('File listed in EXPORTS does not exist: %s' % source)
+
+    def _process_javascript_modules(self, obj):
+        if obj.flavor == 'extra':
+            self._process_final_target_files(obj, obj.modules, 'dist/bin/modules')
+            return
+
+        if obj.flavor == 'extra_pp':
+            for path, strings in obj.modules.walk():
+                if not strings:
+                    continue
+                #print(path, list(strings))
+            return
+
+        if obj.flavor == 'testing':
+            manifest = self._install_manifests['tests']
+            for source, dest, _ in self._walk_hierarchy(obj, obj.modules):
+                manifest.add_symlink(source, mozpath.join('modules', dest))
+            return
+
+        raise Exception('Unsupported JavaScriptModules instance: %s' % obj.flavor)
+
+    def _process_final_target_files(self, obj, files, target):
+        if target.startswith('dist/bin'):
+            install_manifest = self._install_manifests['dist_bin']
+            reltarget = mozpath.relpath(target, 'dist/bin')
+        elif target.startswith('dist/xpi-stage'):
+            install_manifest = self._install_manifests['dist_xpi-stage']
+            reltarget = mozpath.relpath(target, 'dist/xpi-stage')
+        else:
+            raise Exception("Cannot install to " + target)
+
+        for path, strings in files.walk():
+            for f in strings:
+                source = mozpath.normpath(os.path.join(obj.srcdir, f))
+                dest = mozpath.join(reltarget, path, mozpath.basename(f))
+                install_manifest.add_symlink(source, dest)
+
+    def _process_test_harness_files(self, obj):
+        for path, files in obj.srcdir_files.iteritems():
+            for source in files:
+                dest = '%s/%s' % (path, mozpath.basename(source))
+                self._install_manifests['tests'].add_symlink(source, dest)
+
+        for path, patterns in obj.srcdir_pattern_files.iteritems():
+            for p in patterns:
+                self._install_manifests['tests'].add_pattern_symlink(obj.srcdir, p, path)
+
+        for path, files in obj.objdir_files.iteritems():
+            #TODO: no handle this time
+            pass
+
+    def _get_full_path(self, obj, filename):
+        return os.path.normpath(os.path.join(obj.srcdir, filename))
+
+    def _process_variable_passthru(self, obj):
+        # Sorted so output is consistent and we don't bump mtimes.
+        for k, v in sorted(obj.variables.items()):
+            if k == 'EXTRA_COMPONENTS':
+                for f in v:
+                    self._extra_components.add(self._get_full_path(obj, f))
+            elif k == 'EXTRA_PP_COMPONENTS':
+                for f in v:
+                    self._extra_pp_components.add(self._get_full_path(obj, f))
+            elif k in ['DISABLE_STL_WRAPPING', 'VISIBILITY_FLAGS', 'RCINCLUDE', 'MSVC_ENABLE_PGO', 'DEFFILE', 'USE_STATIC_LIBS']:
+                _get_attribute_with(self._cc_configs, obj.srcdir)[k] = v
+            else:
+                print(k, v)
+
+    def print_list(self, v):
+        for x in sorted(list(v)):
+            print(x)
 
     def consume_finished(self):
-        print(self.typeSet)
+        CommonBackend.consume_finished(self)
+        #print(self.typeSet)
+        #self.print_list(self.backend_input_files) # moz.build files
+        #print(self._cc_configs)
+        #self.print_list(self._extra_pp_components)
+        #self.print_list(self._js_preference_files)
+
+    def _handle_idl_manager(self, manager):#For CommonBackend to call
+        build_files = self._install_manifests['xpidl']
+
+        for idl in manager.idls.values():
+            self._install_manifests['dist_idl'].add_symlink(idl['source'],
+                idl['basename'])
+            self._install_manifests['dist_include'].add_optional_exists('%s.h'
+                % idl['root'])
+
+        for module in manager.modules:
+            build_files.add_optional_exists(mozpath.join('.deps',
+                '%s.pp' % module))
+
+    def _handle_ipdl_sources(self, ipdl_dir,
+        sorted_ipdl_sources, unified_ipdl_cppsrcs_mapping
+    ):
+        #TODO: not implemented yet
         pass

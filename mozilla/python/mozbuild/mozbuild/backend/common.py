@@ -242,9 +242,10 @@ class CommonBackend(BuildBackend):
             if hasattr(self, '_process_unified_sources'):
                 self._process_unified_sources(obj)
         else:
-            return
+            return False
 
         obj.ack()
+        return True
 
     def consume_finished(self):
         if len(self._idl_manager.idls):
