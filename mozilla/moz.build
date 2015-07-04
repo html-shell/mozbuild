@@ -1,0 +1,2 @@
+include(CONFIG['MOZ_BUILD_APP'] + '/app.mozbuild')
+include('build/templates.mozbuild')

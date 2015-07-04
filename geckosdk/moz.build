@@ -1,0 +1,10 @@
+
+DIRS += [
+  'fallible',
+  'mozalloc',
+  'mozcrt',
+  'xpcomglue',
+  'xul',
+  '/mozilla/config/external/nspr',
+  '/mozilla/config/external/nss',
+]
