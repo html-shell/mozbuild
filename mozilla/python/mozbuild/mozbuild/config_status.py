@@ -96,8 +96,8 @@ def config_status(topobjdir='.', topsrcdir='.',
     parser.add_option('-d', '--diff', action='store_true',
                       help='print diffs of changed files.')
     parser.add_option('-b', '--backend',
-                      choices=['RecursiveMake', 'AndroidEclipse', 'CppEclipse', 'VisualStudio'],
-                      default='RecursiveMake',
+                      choices=['RecursiveMake', 'AndroidEclipse', 'CppEclipse', 'VisualStudio', 'Internal'],
+                      default='Internal',
                       help='what backend to build (default: RecursiveMake).')
     options, args = parser.parse_args()
 
@@ -128,6 +128,9 @@ def config_status(topobjdir='.', topsrcdir='.',
     elif options.backend == 'VisualStudio':
         from mozbuild.backend.visualstudio import VisualStudioBackend
         backend_cls = VisualStudioBackend
+    elif options.backend == 'Internal':
+        from mozbuild.backend.internal import InternalBackend
+        backend_cls = InternalBackend
 
     the_backend = backend_cls(env)
 

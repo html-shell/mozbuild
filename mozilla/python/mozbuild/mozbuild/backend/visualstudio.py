@@ -97,10 +97,10 @@ class VisualStudioBackend(CommonBackend):
         obj.ack()
 
         reldir = getattr(obj, 'relativedir', None)
-
         if hasattr(obj, 'config') and reldir not in self._paths_to_configs:
             self._paths_to_configs[reldir] = obj.config
 
+        handled = True
         if isinstance(obj, Sources):
             self._add_sources(reldir, obj)
 
@@ -129,6 +129,9 @@ class VisualStudioBackend(CommonBackend):
                 includes.append(os.path.join('$(TopSrcDir)', p[1:]))
             else:
                 includes.append(os.path.join('$(TopSrcDir)', reldir, p))
+        else:
+            handled = False
+        return handled
 
     def _add_sources(self, reldir, obj):
         s = self._paths_to_sources.setdefault(reldir, set())

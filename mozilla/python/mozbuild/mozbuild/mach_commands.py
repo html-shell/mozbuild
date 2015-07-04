@@ -579,10 +579,10 @@ class Build(MachCommandBase):
     # It would be nice to filter the choices below based on
     # conditions, but that is for another day.
     @CommandArgument('-b', '--backend',
-        choices=['RecursiveMake', 'AndroidEclipse', 'CppEclipse', 'VisualStudio'],
-        default='RecursiveMake',
+        choices=['RecursiveMake', 'AndroidEclipse', 'CppEclipse', 'VisualStudio', 'Internal'],
+        default='Internal',
         help='Which backend to build (default: RecursiveMake).')
-    def build_backend(self, backend='RecursiveMake', diff=False):
+    def build_backend(self, backend='Internal', diff=False):
         python = self.virtualenv_manager.python_path
         config_status = os.path.join(self.topobjdir, 'config.status')
 

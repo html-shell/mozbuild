@@ -1,0 +1,19 @@
+{
+  "cmd": "{PROJECT_PATH}/../mozilla-build/python/python",
+  "name": "MozBuild",
+  "args": [ "{PROJECT_PATH}/../../build/BoltBuild.py", "build-backend"],
+  "sh": false,
+  "cwd": "{PROJECT_PATH}/../../",
+  "env": {
+    "VARIABLE1": "VALUE1",
+    "VARIABLE2": "VALUE2"
+  },
+  "errorMatch": "^(?<file>[^\\.]+.c):(?<line>\\d+):(?<col>\\d+).$",
+  "targets": {
+    "Release": {
+      "cmd": "{PROJECT_PATH}/../mozilla-build/python/python",
+      "sh": false,
+      "args": [ "{PROJECT_PATH}/build/MozBuild.py"]
+    }
+  }
+}
