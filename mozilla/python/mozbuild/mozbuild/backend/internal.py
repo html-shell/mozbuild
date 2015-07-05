@@ -106,9 +106,9 @@ class InternalBackend(CommonBackend):
         self.typeSet = set()
 
     def consume_object(self, obj):
-        reldir = getattr(obj, 'srcdir', None)
-        if hasattr(obj, 'config') and reldir not in self._paths_to_configs:
-            self._paths_to_configs[reldir] = obj.config
+        srcdir = getattr(obj, 'srcdir', None)
+        if hasattr(obj, 'config') and srcdir not in self._paths_to_configs:
+            self._paths_to_configs[srcdir] = obj.config
 
         if isinstance(obj, ContextDerived) and CommonBackend.consume_object(self, obj):
             return
@@ -119,28 +119,28 @@ class InternalBackend(CommonBackend):
             #No need to handle
             pass
         elif isinstance(obj, Sources):
-            self._add_sources(reldir, obj)
+            self._add_sources(srcdir, obj)
 
         elif isinstance(obj, HostSources):
-            self._add_sources(reldir, obj)
+            self._add_sources(srcdir, obj)
 
         elif isinstance(obj, GeneratedSources):
-            self._add_sources(reldir, obj)
+            self._add_sources(srcdir, obj)
 
         elif isinstance(obj, Library):
-            self._libs_to_paths[obj.basename] = reldir
+            self._libs_to_paths[obj.basename] = srcdir
 
         elif isinstance(obj, Defines):
-            self._paths_to_defines.setdefault(reldir, {}).update(obj.defines)
+            self._paths_to_defines.setdefault(srcdir, {}).update(obj.defines)
 
         elif isinstance(obj, LocalInclude):
             p = obj.path
-            includes = self._paths_to_includes.setdefault(reldir, [])
+            includes = self._paths_to_includes.setdefault(srcdir, [])
 
             if p.startswith('/'):
                 final_include = mozpath.join(obj.topsrcdir, p[1:])
             else:
-                final_include = mozpath.join(reldir, p)
+                final_include = mozpath.join(srcdir, p)
             includes.append(mozpath.normpath(final_include))
 
         elif isinstance(obj, Exports):
@@ -162,6 +162,7 @@ class InternalBackend(CommonBackend):
             #TODO: no handle this time
             pass
         elif isinstance(obj, JARManifest):
+            print(mozpath.join(obj.srcdir, obj.path))
             self._jar_manifests.add(obj.path)
         elif isinstance(obj, TestHarnessFiles):
             self._process_test_harness_files(obj)
@@ -197,18 +198,18 @@ class InternalBackend(CommonBackend):
             self.typeSet.add(obj.__class__.__name__)
 
 
-    def _add_sources(self, reldir, obj):
-        s = self._paths_to_sources.setdefault(reldir, set())
+    def _add_sources(self, srcdir, obj):
+        s = self._paths_to_sources.setdefault(srcdir, set())
         s.update(obj.files)
 
     def _process_unified_sources(self, obj):
-        reldir = getattr(obj, 'srcdir', None)
+        srcdir = getattr(obj, 'srcdir', None)
 
         if obj.have_unified_mapping:
             sources = self._paths_to_unifies
         else:
             sources = self._paths_to_sources
-        s = sources.setdefault(reldir, set())
+        s = sources.setdefault(srcdir, set())
         s.update(obj.files)
         if obj.have_unified_mapping:
             unified_files = [mozpath.join(obj.objdir, unified_file) for unified_file, _ in obj.unified_source_mapping]
