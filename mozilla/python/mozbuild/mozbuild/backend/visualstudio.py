@@ -18,6 +18,7 @@ from xml.dom import getDOMImplementation
 from mozpack.files import FileFinder
 
 from .common import CommonBackend
+from .internal import InternalBackend
 from ..frontend.data import (
     Defines,
     GeneratedSources,
@@ -27,7 +28,7 @@ from ..frontend.data import (
     Sources,
     UnifiedSources,
 )
-
+import mozpack.path as mozpath
 
 MSBUILD_NAMESPACE = 'http://schemas.microsoft.com/developer/msbuild/2003'
 
@@ -55,7 +56,7 @@ def visual_studio_product_to_internal_version(version, solution=False):
         else:
             raise Exception('Unknown version seen: %s' % version)
 
-class VisualStudioBackend(CommonBackend):
+class VisualStudioBackend(InternalBackend):
     """Generate Visual Studio project files.
 
     This backend is used to produce Visual Studio projects and a solution
@@ -71,19 +72,12 @@ class VisualStudioBackend(CommonBackend):
     """
 
     def _init(self):
-        CommonBackend._init(self)
+        InternalBackend._init(self)
 
         # These should eventually evolve into parameters.
         self._out_dir = os.path.join(self.environment.topobjdir, 'msvc')
         # But making this one a parameter requires testing first.
         self._version = '2010'
-
-        self._paths_to_sources = {}
-        self._path_to_unified_sources = set();
-        self._paths_to_includes = {}
-        self._paths_to_defines = {}
-        self._paths_to_configs = {}
-        self._libs_to_paths = {}
 
         def detailed(summary):
             return 'Generated Visual Studio solution at %s' % (
@@ -92,64 +86,8 @@ class VisualStudioBackend(CommonBackend):
         self.summary.backend_detailed_summary = types.MethodType(detailed,
             self.summary)
 
-    def consume_object(self, obj):
-        # Just acknowledge everything.
-        obj.ack()
-
-        reldir = getattr(obj, 'relativedir', None)
-        if hasattr(obj, 'config') and reldir not in self._paths_to_configs:
-            self._paths_to_configs[reldir] = obj.config
-
-        handled = True
-        if isinstance(obj, Sources):
-            self._add_sources(reldir, obj)
-
-        elif isinstance(obj, HostSources):
-            self._add_sources(reldir, obj)
-
-        elif isinstance(obj, GeneratedSources):
-            self._add_sources(reldir, obj)
-
-        elif isinstance(obj, UnifiedSources):
-            # XXX we should be letting CommonBackend.consume_object call this
-            # for us instead.
-            self._process_unified_sources(obj);
-
-        elif isinstance(obj, Library):
-            self._libs_to_paths[obj.basename] = reldir
-
-        elif isinstance(obj, Defines):
-            self._paths_to_defines.setdefault(reldir, {}).update(obj.defines)
-
-        elif isinstance(obj, LocalInclude):
-            p = obj.path
-            includes = self._paths_to_includes.setdefault(reldir, [])
-
-            if p.startswith('/'):
-                includes.append(os.path.join('$(TopSrcDir)', p[1:]))
-            else:
-                includes.append(os.path.join('$(TopSrcDir)', reldir, p))
-        else:
-            handled = False
-        return handled
-
-    def _add_sources(self, reldir, obj):
-        s = self._paths_to_sources.setdefault(reldir, set())
-        s.update(obj.files)
-
-    def _process_unified_sources(self, obj):
-        reldir = getattr(obj, 'relativedir', None)
-
-        s = self._paths_to_sources.setdefault(reldir, set())
-        if obj.have_unified_mapping:
-            unified_files = [unified_file for unified_file, _ in obj.unified_source_mapping]
-            s.update(unified_files)
-            self._path_to_unified_sources.update(unified_files);
-            s.update(obj.files) # For unified sources, we need them both
-        else:
-            s.update(obj.files)
-
     def consume_finished(self):
+        InternalBackend.consume_finished(self)
         out_dir = self._out_dir
         try:
             os.makedirs(out_dir)

@@ -1,7 +1,7 @@
 {
   "cmd": "{PROJECT_PATH}/../Release/_virtualenv/Scripts/python.exe",
   "name": "MozBuild",
-  "args": [ "{PROJECT_PATH}/../Release/config.status", "--backend=Internal"],
+  "args": [ "{PROJECT_PATH}/../Release/config.status", "--backend=VisualStudio"],
   "sh": false,
   "cwd": "{PROJECT_PATH}/../Release/",
   "env": {

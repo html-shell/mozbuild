@@ -64,7 +64,7 @@ class ContextDerived(TreeMetadata):
         'objdir',
         'relativedir',
         'context_all_paths',
-        'context_path',
+        'context_main_path',
         'srcdir',
         'topobjdir',
         'topsrcdir',

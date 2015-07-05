@@ -5,6 +5,6 @@ DIRS += [
   'mozcrt',
   'xpcomglue',
   'xul',
-  '/mozilla/config/external/nspr',
-  '/mozilla/config/external/nss',
+  '/%s/config/external/nspr' % CONFIG['top_srcdir'],
+  '/%s/config/external/nss' % CONFIG['top_srcdir'],
 ]

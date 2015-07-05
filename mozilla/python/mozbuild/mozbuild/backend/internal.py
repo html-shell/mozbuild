@@ -25,7 +25,6 @@ from .common import (
     WebIDLCollection
 )
 
-from .visualstudio import VisualStudioBackend
 from ..frontend.data import (
     ContextDerived,
     GeneratedInclude,
@@ -48,7 +47,14 @@ from ..frontend.data import (
     HostSimpleProgram,
     HostProgram,
     HostLibrary,
-    InstallationTarget
+    InstallationTarget,
+    Defines,
+    GeneratedSources,
+    HostSources,
+    Library,
+    LocalInclude,
+    Sources,
+    UnifiedSources,
 )
 
 from ..util import (
@@ -60,20 +66,19 @@ def _get_attribute_with(v, k, default = {}):
         v[k] = default
     return v[k]
 
-class InternalBackend(VisualStudioBackend):
+class InternalBackend(CommonBackend):
     def _init(self):
+        CommonBackend._init(self)
 
-        self._idl_manager = XPIDLManager(self.environment)
-        self._test_manager = TestManager(self.environment)
-        self._webidls = WebIDLCollection()
-        self._configs = set()
-        self._ipdl_sources = set()
+        self._paths_to_unifies = {}
+
         self._paths_to_sources = {}
-        self._path_to_unified_sources = set()
+        self._path_to_unified_sources = set();
         self._paths_to_includes = {}
         self._paths_to_defines = {}
         self._paths_to_configs = {}
         self._libs_to_paths = {}
+
         self._paths_to_export = {}
         self._extra_components = set()
         self._extra_pp_components = set()
@@ -103,22 +108,50 @@ class InternalBackend(VisualStudioBackend):
         self.typeSet = set()
 
     def consume_object(self, obj):
-        handled = False
-        if isinstance(obj, ContextDerived):
-            handled = CommonBackend.consume_object(self, obj)
-        if handled and not isinstance(obj, UnifiedSources): #UnifiedSources should handled by visual studio
+        reldir = getattr(obj, 'srcdir', None)
+        if hasattr(obj, 'config') and reldir not in self._paths_to_configs:
+            self._paths_to_configs[reldir] = obj.config
+
+        if isinstance(obj, ContextDerived) and CommonBackend.consume_object(self, obj):
             return
-        handled = VisualStudioBackend.consume_object(self, obj)
-        if handled:
-            return
+
+        # Just acknowledge everything.
+        obj.ack()
         if isinstance(obj, DirectoryTraversal):
             #No need to handle
             pass
+        elif isinstance(obj, Sources):
+            self._add_sources(reldir, obj)
+
+        elif isinstance(obj, HostSources):
+            self._add_sources(reldir, obj)
+
+        elif isinstance(obj, GeneratedSources):
+            self._add_sources(reldir, obj)
+
+        elif isinstance(obj, Library):
+            self._libs_to_paths[obj.basename] = reldir
+
+        elif isinstance(obj, Defines):
+            self._paths_to_defines.setdefault(reldir, {}).update(obj.defines)
+
+        elif isinstance(obj, LocalInclude):
+            p = obj.path
+            includes = self._paths_to_includes.setdefault(reldir, [])
+
+            if p.startswith('/'):
+                final_include = mozpath.join(obj.topsrcdir, p[1:])
+            else:
+                final_include = mozpath.join(reldir, p)
+            includes.append(mozpath.normpath(final_include))
+
         elif isinstance(obj, Exports):
             self._process_exports(obj, obj.exports)
+
         elif isinstance(obj, GeneratedFile):
             #TODO: no handle this time
             pass
+
         elif isinstance(obj, VariablePassthru):
             self._process_variable_passthru(obj)
         elif isinstance(obj, JsPreferenceFile):
@@ -160,6 +193,24 @@ class InternalBackend(VisualStudioBackend):
             self._process_generated_include(obj)
         else:
             self.typeSet.add(obj.__class__.__name__)
+
+
+    def _add_sources(self, reldir, obj):
+        s = self._paths_to_sources.setdefault(reldir, set())
+        s.update(obj.files)
+
+    def _process_unified_sources(self, obj):
+        reldir = getattr(obj, 'srcdir', None)
+
+        if obj.have_unified_mapping:
+            sources = self._paths_to_unifies
+        else:
+            sources = self._paths_to_sources
+        s = sources.setdefault(reldir, set())
+        s.update(obj.files)
+        if obj.have_unified_mapping:
+            unified_files = [mozpath.join(obj.objdir, unified_file) for unified_file, _ in obj.unified_source_mapping]
+            self._path_to_unified_sources.update(unified_files);
 
     def _process_generated_include(self, obj):
         if obj.path.startswith('/'):
