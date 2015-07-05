@@ -197,7 +197,7 @@ class CommonBackend(BuildBackend):
             # Do not handle ConfigFileSubstitution for Makefiles. Leave that
             # to other
             if mozpath.basename(obj.output_path) == 'Makefile':
-                return
+                return False
             with self._get_preprocessor(obj) as pp:
                 pp.do_include(obj.input_path)
             self.backend_input_files.add(obj.input_path)
