@@ -62,10 +62,43 @@ from ..util import (
     ensureParentDir,
 )
 
-def _get_attribute_with(v, k, default = {}):
-    if not k in v:
-        v[k] = default
-    return v[k]
+def get_define(defines, k):
+    if k == 'RELATIVESRCDIR':
+        return None
+    if defines[k] is None:
+        return None
+    if defines[k] is False:
+        return ''
+    if defines[k] is True:
+        return '1'
+    return defines[k]
+
+def get_define_list(defines):
+    return [(name, get_define(defines, name)) for name in defines if (get_define(defines, name) is not None)]
+
+#define_type could be ACDEFINES ALLDEFINES or dict or list
+def compute_defines(config, define_type = 'dict', defines=None):
+    new_defines = dict(config.defines)
+    for x in config.non_global_defines:
+        if x in new_defines:
+            del new_defines[x]
+    if defines != None:
+        new_defines.update(defines)
+    if define_type == 'dict':
+        return new_defines
+    l = get_define_list(new_defines)
+    if define_type == 'list':
+        return l
+    if define_type == 'DEFINES':
+        return ['-D%s=%s' % (name, value) for (name, value) in l]
+
+    if define_type == 'ACDEFINES':
+        return ' '.join(['-D%s=%s' % (name,
+            shell_quote(new_defines[name]).replace('$', '$$')) for name in new_defines if new_defines[name]])
+    if define_type == 'ALLDEFINES':
+        return '\n'.join(sorted(['#define %s %s' % (name,
+            new_defines[name]) for name in new_defines]))
+
 
 class InternalBackend(CommonBackend):
     def _init(self):
@@ -80,7 +113,6 @@ class InternalBackend(CommonBackend):
         self._paths_to_configs = {}
         self._libs_to_paths = {}
 
-        self._jar_manifests = set()
         self._cc_configs = {}
         self._python_unit_tests = set()
         self._garbages = set()
@@ -97,6 +129,10 @@ class InternalBackend(CommonBackend):
                 'xpidl',
             ]}
 
+        #TODO: Remove the manifest files
+        self.substs = self.environment.substs
+        XULPPFLAGS = self.substs['MOZ_DEBUG_ENABLE_DEFS'] if self.substs['MOZ_DEBUG'] else self.substs['MOZ_DEBUG_DISABLE_DEFS']
+        self.XULPPFLAGS = XULPPFLAGS.split(' ')
         self.dep_path = mozpath.join(self.environment.topobjdir, '_build_manifests', '.deps', 'install')
 
         def detailed(summary):
@@ -104,6 +140,11 @@ class InternalBackend(CommonBackend):
         self.summary.backend_detailed_summary = types.MethodType(detailed,
             self.summary)
         self.typeSet = set()
+
+    def add_jar_install_list(self, srcdir, installList, preprocessor = False):
+        #TODO: Implement this
+        #print(srcdir, installList)
+        pass
 
     def consume_object(self, obj):
         srcdir = getattr(obj, 'srcdir', None)
@@ -116,7 +157,7 @@ class InternalBackend(CommonBackend):
         # Just acknowledge everything.
         obj.ack()
         if isinstance(obj, DirectoryTraversal):
-            #No need to handle
+            self._cc_configs.setdefault(srcdir, {})['FINAL_TARGET'] = obj.target
             pass
         elif isinstance(obj, Sources):
             self._add_sources(srcdir, obj)
@@ -162,8 +203,31 @@ class InternalBackend(CommonBackend):
             #TODO: no handle this time
             pass
         elif isinstance(obj, JARManifest):
-            print(mozpath.join(obj.srcdir, obj.path))
-            self._jar_manifests.add(obj.path)
+            exist_defines = self._paths_to_defines.get(srcdir, {})
+            defines = compute_defines(self.environment, 'DEFINES', exist_defines)
+            chromeDir = mozpath.join(obj.topobjdir, obj.target, 'chrome')
+
+            localedir = srcdir
+            if exist_defines.has_key('RELATIVESRCDIR'):
+                localedir = mozpath.join(obj.topsrcdir, exist_defines['RELATIVESRCDIR'])
+            jarArgs = [
+                '-v',
+                '-t', obj.topsrcdir,
+                '--output-list',
+                '-j', chromeDir,
+                '-f', 'flat',
+                '-c', mozpath.join(localedir, self.substs['AB_CD']),
+            ]
+            mozbuild.jar.main(jarArgs + self.XULPPFLAGS + defines + [obj.path])
+            jm = mozbuild.jar.jm
+            self.add_jar_install_list(srcdir, jm.installList)
+            self.add_jar_install_list(srcdir, jm.processList, True)
+            self.backend_input_files.add(obj.path)
+
+            #$(call py_action,jar_maker, $(QUIET) -j $(FINAL_TARGET)/chrome
+	        #$(MAKE_JARS_FLAGS) $(XULPPFLAGS) $(DEFINES) $(ACDEFINES) $(JAR_MANIFEST))
+            #MAKE_JARS_FLAGS += --root-manifest-entry-appid='$(XPI_ROOT_APPID)'
+            #print(self._paths_to_defines[srcdir])
         elif isinstance(obj, TestHarnessFiles):
             self._process_test_harness_files(obj)
         elif isinstance(obj, ReaderSummary):
@@ -221,8 +285,8 @@ class InternalBackend(CommonBackend):
         else:
             path = mozpath.join(obj.srcdir, obj.path)
         path = mozpath.normpath(path).replace('\\', '/')
-        srcdirConfig = _get_attribute_with(self._cc_configs, obj.srcdir)
-        _get_attribute_with(srcdirConfig, 'GENERATED_INCLUDES', []).append(path)
+        srcdirConfig = self._cc_configs.setdefault(obj.srcdir, {})
+        srcdirConfig.setdefault('GENERATED_INCLUDES', []).append(path)
 
     def _walk_hierarchy(self, obj, element, namespace=''):
         """Walks the ``HierarchicalStringList`` ``element`` in the context of
@@ -278,11 +342,12 @@ class InternalBackend(CommonBackend):
         return (install_manifest, reltarget)
 
     def _process_final_target_files(self, obj, files, target, preprocessor = False, marker='#'):
-        install_manifest, reltarget = self._get_manifest_from_target(target)
         for path, strings in files.walk():
+            target = mozpath.join(target, path)
+            install_manifest, reltarget = self._get_manifest_from_target(target)
             for f in strings:
                 source = mozpath.normpath(mozpath.join(obj.srcdir, f))
-                dest = mozpath.join(reltarget, path, mozpath.basename(f))
+                dest = mozpath.join(reltarget, mozpath.basename(f))
                 if preprocessor:
                     dep_file = mozpath.join(self.dep_path, target, mozpath.basename(f) +'.pp')
                     install_manifest.add_preprocess(source, dest, dep_file, marker=marker)
@@ -341,7 +406,7 @@ class InternalBackend(CommonBackend):
                 for p in v:
                     self._garbages.add(self._get_full_path(obj, p))
             elif k in cc_flags:
-                _get_attribute_with(self._cc_configs, obj.srcdir)[k] = v
+                self._cc_configs.setdefault(obj.srcdir, {})[k] = v
             else:
                 print(k, v)
 
@@ -352,6 +417,7 @@ class InternalBackend(CommonBackend):
     def consume_finished(self):
         CommonBackend.consume_finished(self)
         print(self.typeSet)
+        #print(self._cc_configs)
         #self.print_list(self._garbages)
         #self.print_list(self._python_unit_tests)
         #self.print_list(self.backend_input_files) # moz.build files

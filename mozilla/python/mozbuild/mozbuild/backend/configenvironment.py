@@ -106,6 +106,7 @@ class ConfigEnvironment(object):
             source = mozpath.join(topobjdir, 'config.status')
         self.source = source
         self.defines = ReadOnlyDict(defines)
+        self.non_global_defines = frozenset(non_global_defines)
         self.substs = dict(substs)
         self.topsrcdir = mozpath.abspath(topsrcdir)
         self.topobjdir = mozpath.abspath(topobjdir)

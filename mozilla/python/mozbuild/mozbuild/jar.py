@@ -22,6 +22,7 @@ from mozbuild.util import (
     PushbackIter,
 )
 
+import mozpack.path as mozpath
 from mozbuild.preprocessor import Preprocessor
 from mozbuild.action.buildlist import addEntriesToListFile
 if sys.platform == 'win32':
@@ -239,7 +240,7 @@ class JarMaker(object):
             self.localedirs = \
                 self.generateLocaleDirs(self.relativesrcdir)
         if isinstance(infile, basestring):
-            logging.info('processing ' + infile)
+            if not self.options.outputList: logging.info('processing ' + infile)
             self.sourcedirs.append(_normpath(os.path.dirname(infile)))
         pp = self.pp.clone()
         pp.out = StringIO()
@@ -390,6 +391,8 @@ class JarMaker(object):
                                ', '.join(src_base)))
         if self.options.outputList:
             realout = outHelper.ensureDirFor(out)
+            realsrc = mozpath.normpath(realsrc)
+            realout = mozpath.normpath(realout)
             if m.group('optPreprocess'):
                 self.processList.append((realsrc, realout))
             else:
