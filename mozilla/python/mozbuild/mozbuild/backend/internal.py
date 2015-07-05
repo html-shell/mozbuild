@@ -80,11 +80,6 @@ class InternalBackend(CommonBackend):
         self._paths_to_configs = {}
         self._libs_to_paths = {}
 
-        self._paths_to_export = {}
-        self._extra_components = set()
-        self._extra_pp_components = set()
-        self._extra_pp_modules = set()
-        self._js_preference_files = set()
         self._jar_manifests = set()
         self._cc_configs = {}
         self._python_unit_tests = set()
@@ -161,7 +156,7 @@ class InternalBackend(CommonBackend):
             js_prefs = HierarchicalStringList()
             js_prefs += [obj.path]
             target = mozpath.join(obj.target, 'defaults','preferences')
-            self._process_final_target_files(obj, js_prefs, target)
+            self._process_final_target_files(obj, js_prefs, target, True)
 
         elif isinstance(obj, ConfigFileSubstitution):
             #TODO: no handle this time
@@ -333,12 +328,11 @@ class InternalBackend(CommonBackend):
 
         # Sorted so output is consistent and we don't bump mtimes.
         for k, v in sorted(obj.variables.items()):
-            if k == 'EXTRA_COMPONENTS':
-                for f in v:
-                    self._extra_components.add(self._get_full_path(obj, f))
-            elif k == 'EXTRA_PP_COMPONENTS':
-                for f in v:
-                    self._extra_pp_components.add(self._get_full_path(obj, f))
+            if k == 'EXTRA_COMPONENTS' or k == 'EXTRA_PP_COMPONENTS':
+                target = mozpath.join(obj.target, 'components')
+                extra_components = HierarchicalStringList()
+                extra_components += v
+                self._process_final_target_files(obj, extra_components, target, k == 'EXTRA_PP_COMPONENTS')
             elif k == 'PYTHON_UNIT_TESTS':
                 for p in v:
                     self._python_unit_tests.add(self._get_full_path(obj, p))
