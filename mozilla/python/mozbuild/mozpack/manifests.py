@@ -157,7 +157,7 @@ class InstallManifest(object):
 
             if record_type == self.PREPROCESS:
                 dest, source, deps, marker, defines = fields[1:]
-                self.add_preprocess(source, dest, deps, marker,
+                self.add_preprocess(self._decode_field_entry(source), dest, deps, marker,
                     self._decode_field_entry(defines))
                 continue
 
@@ -288,7 +288,7 @@ class InstallManifest(object):
         written to ``dest``.
         """
         self._add_entry(dest,
-            (self.PREPROCESS, source, deps, marker, self._encode_field_entry(defines)))
+            (self.PREPROCESS, self._encode_field_entry(source), deps, marker, self._encode_field_entry(defines)))
 
     def _add_entry(self, dest, entry):
         if dest in self._dests:
@@ -340,7 +340,7 @@ class InstallManifest(object):
                 continue
 
             if install_type == self.PREPROCESS:
-                registry.add(dest, PreprocessedFile(entry[1],
+                registry.add(dest, PreprocessedFile(self._decode_field_entry(entry[1]),
                     depfile_path=entry[2],
                     marker=entry[3],
                     defines=self._decode_field_entry(entry[4]),

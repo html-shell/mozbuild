@@ -346,7 +346,7 @@ class InternalBackend(VisualStudioBackend):
             dep_file = mozpath.join(dep_path, xpt_path + '.pp')
 
             #The .idl related .h fiels is also genreated by this preprocess
-            install_manifest.add_preprocess(' '.join(deps), xpt_path, dep_file)
+            install_manifest.add_preprocess(deps, xpt_path, dep_file, marker='xpt')
 
     def _handle_ipdl_sources(self, ipdl_dir,
         sorted_ipdl_sources, unified_ipdl_cppsrcs_mapping
