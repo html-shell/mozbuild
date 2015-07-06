@@ -5,6 +5,7 @@ import os
 import re
 import types
 import uuid
+import copy
 
 from xml.dom import getDOMImplementation
 
@@ -190,14 +191,9 @@ class InternalBackend(CommonBackend):
 
         if not isinstance(obj, DirectoryTraversal) and isinstance(obj, ContextDerived):
             all_contextes = self._get_config(srcdir).setdefault('all_contextes', [])
-            context = {}
-            context['class_name'] = obj.__class__.__name__
-
-            for k in get_slots(type(obj)):
-                if k not in ['topsrcdir', 'topobjdir', 'target', 'config']:
-                    v = getattr(obj, k)
-                    context[k] = v
-            all_contextes.append(context)
+            new_context = copy.copy(obj)
+            new_context.config = None
+            all_contextes.append(new_context)
 
         if isinstance(obj, DirectoryTraversal):
             self._paths_to_configs[obj.srcdir] = obj.config
