@@ -367,6 +367,7 @@ class Linkable(ContextDerived):
         'defines',
         'linked_libraries',
         'linked_system_libs',
+        'library_name',
     )
 
     def __init__(self, context):
@@ -374,6 +375,7 @@ class Linkable(ContextDerived):
         self.linked_libraries = []
         self.linked_system_libs = []
         self.defines = Defines(context, {})
+        self.library_name = context.get('LIBRARY_NAME', None)
 
     def link_library(self, obj):
         assert isinstance(obj, BaseLibrary)

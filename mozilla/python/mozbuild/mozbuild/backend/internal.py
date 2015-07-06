@@ -158,7 +158,8 @@ class InternalBackend(CommonBackend):
         obj.ack()
         if isinstance(obj, DirectoryTraversal):
             self._cc_configs.setdefault(srcdir, {})['FINAL_TARGET'] = obj.target
-            pass
+            self._cc_configs.setdefault(srcdir, {})['TOPSRCDIR'] = obj.topsrcdir
+
         elif isinstance(obj, Sources):
             self._add_sources(srcdir, obj)
 
@@ -169,6 +170,7 @@ class InternalBackend(CommonBackend):
             self._add_sources(srcdir, obj)
 
         elif isinstance(obj, Library):
+            self._cc_configs.setdefault(srcdir, {})['LIBRARY_NAME'] = obj.library_name
             self._libs_to_paths[obj.basename] = srcdir
 
         elif isinstance(obj, Defines):

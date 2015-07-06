@@ -14,6 +14,11 @@
       "cmd": "{PROJECT_PATH}/../mozilla-build/python/python",
       "sh": false,
       "args": [ "{PROJECT_PATH}/../../build/BoltBuild.py", "build-backend"]
+    },
+    "Build": {
+      "cmd": "{PROJECT_PATH}/../mozilla-build/python/python",
+      "sh": false,
+      "args": [ "{PROJECT_PATH}/../../build/BoltBuild.py", "build"]
     }
   }
 }

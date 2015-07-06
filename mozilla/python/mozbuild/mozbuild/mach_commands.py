@@ -507,6 +507,23 @@ class Build(MachCommandBase):
 
         return status
 
+    def build_new(self, what=None, disable_extra_make_dependencies=None, jobs=0,
+        directory=None, verbose=False):
+        python = self.virtualenv_manager.python_path
+        config_status = os.path.join(self.topobjdir, 'config.status')
+
+        if not os.path.exists(config_status):
+            print('config.status not found.  Please run |mach configure| '
+                  'or |mach build| prior to building the %s build backend.'
+                  % backend)
+            return 1
+
+        args = [python, config_status, '--help']
+
+        return self._run_command_in_objdir(args=args, pass_thru=True,
+            ensure_exit_code=False)
+        print("Building finished")
+
     @Command('configure', category='build',
         description='Configure the tree (run configure and config.status).')
     def configure(self):
@@ -1220,3 +1237,5 @@ class MachDebug(MachCommandBase):
                     return list(obj)
                 return json.JSONEncoder.default(self, obj)
         json.dump(self, cls=EnvironmentEncoder, sort_keys=True, fp=out)
+
+Build.build = Build.build_new
