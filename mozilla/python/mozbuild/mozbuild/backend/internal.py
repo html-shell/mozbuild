@@ -120,7 +120,7 @@ class InternalBackend(CommonBackend):
             'topdirs': {},
             'srcdirs': {},
             'garbages': set(),
-            'python_unit_tests': {},
+            'python_unit_tests': set(),
 
             'paths_to_unifies': {},
             'paths_to_sources': {},
