@@ -58,7 +58,6 @@ from ..frontend.data import (
 )
 
 from ..util import (
-    HierarchicalStringList,
     ensureParentDir,
 )
 
@@ -125,6 +124,7 @@ class InternalBackend(CommonBackend):
                 'dist_private',
                 'dist_sdk',
                 'dist_xpi-stage',
+                'dist_branding',
                 'tests',
                 'xpidl',
             ]}
@@ -141,10 +141,10 @@ class InternalBackend(CommonBackend):
             self.summary)
         self.typeSet = set()
 
-    def add_jar_install_list(self, srcdir, installList, preprocessor = False):
-        #TODO: Implement this
-        #print(srcdir, installList)
-        pass
+    def add_jar_install_list(self, obj, installList, preprocessor = False):
+        for s,d in installList:
+            target = mozpath.relpath(d, obj.topobjdir)
+            self._process_files(obj, [s], target, preprocessor = preprocessor, marker='jar', target_is_file = True)
 
     def consume_object(self, obj):
         srcdir = getattr(obj, 'srcdir', None)
@@ -193,11 +193,10 @@ class InternalBackend(CommonBackend):
 
         elif isinstance(obj, VariablePassthru):
             self._process_variable_passthru(obj)
+
         elif isinstance(obj, JsPreferenceFile):
-            js_prefs = HierarchicalStringList()
-            js_prefs += [obj.path]
             target = mozpath.join(obj.target, 'defaults','preferences')
-            self._process_final_target_files(obj, js_prefs, target, True)
+            self._process_files(obj, [obj.path], target, True)
 
         elif isinstance(obj, ConfigFileSubstitution):
             #TODO: no handle this time
@@ -220,12 +219,12 @@ class InternalBackend(CommonBackend):
             ]
             mozbuild.jar.main(jarArgs + self.XULPPFLAGS + defines + [obj.path])
             jm = mozbuild.jar.jm
-            self.add_jar_install_list(srcdir, jm.installList)
-            self.add_jar_install_list(srcdir, jm.processList, True)
+            self.add_jar_install_list(obj, jm.installList)
+            self.add_jar_install_list(obj, jm.processList, True)
             self.backend_input_files.add(obj.path)
 
             #$(call py_action,jar_maker, $(QUIET) -j $(FINAL_TARGET)/chrome
-	        #$(MAKE_JARS_FLAGS) $(XULPPFLAGS) $(DEFINES) $(ACDEFINES) $(JAR_MANIFEST))
+            #$(MAKE_JARS_FLAGS) $(XULPPFLAGS) $(DEFINES) $(ACDEFINES) $(JAR_MANIFEST))
             #MAKE_JARS_FLAGS += --root-manifest-entry-appid='$(XPI_ROOT_APPID)'
             #print(self._paths_to_defines[srcdir])
         elif isinstance(obj, TestHarnessFiles):
@@ -337,22 +336,30 @@ class InternalBackend(CommonBackend):
         elif target.startswith('dist/xpi-stage'):
             install_manifest = self._install_manifests['dist_xpi-stage']
             reltarget = mozpath.relpath(target, 'dist/xpi-stage')
+        elif target.startswith('dist/branding'):
+            install_manifest = self._install_manifests['dist_branding']
+            reltarget = mozpath.relpath(target, 'dist/branding')
+        elif target.startswith('tests'):
+            install_manifest = self._install_manifests['tests']
+            reltarget = mozpath.relpath(target, 'tests')
         else:
             raise Exception("Cannot install to " + target)
         return (install_manifest, reltarget)
 
+    def _process_files(self, obj, files, target, preprocessor = False, marker='#', target_is_file=False):
+        install_manifest, reltarget = self._get_manifest_from_target(target)
+        for f in files:
+            source = mozpath.normpath(mozpath.join(obj.srcdir, f))
+            dest = reltarget if target_is_file else mozpath.join(reltarget, mozpath.basename(f))
+            if preprocessor:
+                dep_file = mozpath.join(self.dep_path, target, mozpath.basename(f) +'.pp')
+                install_manifest.add_preprocess(source, dest, dep_file, marker=marker)
+            else:
+                install_manifest.add_symlink(source, dest)
+
     def _process_final_target_files(self, obj, files, target, preprocessor = False, marker='#'):
         for path, strings in files.walk():
-            target = mozpath.join(target, path)
-            install_manifest, reltarget = self._get_manifest_from_target(target)
-            for f in strings:
-                source = mozpath.normpath(mozpath.join(obj.srcdir, f))
-                dest = mozpath.join(reltarget, mozpath.basename(f))
-                if preprocessor:
-                    dep_file = mozpath.join(self.dep_path, target, mozpath.basename(f) +'.pp')
-                    install_manifest.add_preprocess(source, dest, dep_file, marker=marker)
-                else:
-                    install_manifest.add_symlink(source, dest)
+            self._process_files(obj, strings, mozpath.join(target, path), preprocessor = False, marker='#')
 
     def _process_test_harness_files(self, obj):
         for path, files in obj.srcdir_files.iteritems():
@@ -396,9 +403,7 @@ class InternalBackend(CommonBackend):
         for k, v in sorted(obj.variables.items()):
             if k == 'EXTRA_COMPONENTS' or k == 'EXTRA_PP_COMPONENTS':
                 target = mozpath.join(obj.target, 'components')
-                extra_components = HierarchicalStringList()
-                extra_components += v
-                self._process_final_target_files(obj, extra_components, target, k == 'EXTRA_PP_COMPONENTS')
+                self._process_files(obj, v, target, k == 'EXTRA_PP_COMPONENTS')
             elif k == 'PYTHON_UNIT_TESTS':
                 for p in v:
                     self._python_unit_tests.add(self._get_full_path(obj, p))
