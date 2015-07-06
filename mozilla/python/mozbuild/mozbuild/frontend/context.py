@@ -275,13 +275,16 @@ class TemplateContext(Context):
 class FinalTargetValue(ContextDerivedValue, unicode):
     def __new__(cls, context, value=""):
         if not value:
-            value = 'dist/'
-            if context['XPI_NAME']:
-                value += 'xpi-stage/' + context['XPI_NAME']
+            if isinstance(context, unicode):
+              value = context
             else:
-                value += 'bin'
-            if context['DIST_SUBDIR']:
-                value += '/' + context['DIST_SUBDIR']
+              value = 'dist/'
+              if context['XPI_NAME']:
+                  value += 'xpi-stage/' + context['XPI_NAME']
+              else:
+                  value += 'bin'
+              if context['DIST_SUBDIR']:
+                  value += '/' + context['DIST_SUBDIR']
         return unicode.__new__(cls, value)
 
 

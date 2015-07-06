@@ -518,7 +518,7 @@ class Build(MachCommandBase):
                   % backend)
             return 1
 
-        args = [python, config_status, '--help']
+        args = [python, config_status, '--backend=Build']
 
         return self._run_command_in_objdir(args=args, pass_thru=True,
             ensure_exit_code=False)

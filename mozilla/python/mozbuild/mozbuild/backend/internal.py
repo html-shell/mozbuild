@@ -60,6 +60,7 @@ from ..frontend.data import (
 
 from ..util import (
     ensureParentDir,
+    ReadOnlyDict,
 )
 
 def get_define(defines, k):
@@ -488,13 +489,7 @@ class InternalBackend(CommonBackend):
 
         self._write_manifests('install', self._install_manifests)
         ensureParentDir(mozpath.join(self.environment.topobjdir, 'dist', 'foo'))
-
-        json_config_file_path = mozpath.join(self.environment.topobjdir,
-            'all_config.pickle')
-
-        import pickle
-        with self._write_file(json_config_file_path) as fh:
-            pickle.dump(self.json_configs, fh, -1)
+        self.save_all_configs()
 
     def _write_manifests(self, dest, manifests):
         man_dir = mozpath.join(self.environment.topobjdir, '_build_manifests',
@@ -546,3 +541,34 @@ class InternalBackend(CommonBackend):
             if f.startswith(include_dir):
                 self._get_manifest_from_target('dist/include')[0].add_optional_exists(
                         mozpath.relpath(f, include_dir))
+    @property
+    def configs_pickle_path(self):
+        return mozpath.join(self.environment.topobjdir, 'all_config.pickle')
+
+    def save_all_configs(self):
+        import cPickle
+        with open(self.configs_pickle_path, 'wb') as fh:
+            cPickle.dump(self.json_configs, fh, -1)
+
+    def load_all_configs(self):
+        def new_setitem(self, key, value):
+            dict.__setitem__(self, key, value)
+
+        with open(self.configs_pickle_path, 'rb') as fh:
+            import cPickle
+            saved_setitem = ReadOnlyDict.__setitem__
+            ReadOnlyDict.__setitem__ = new_setitem
+            cPickle.load(fh)
+            ReadOnlyDict.__setitem__ = saved_setitem
+
+class InternalBuild(InternalBackend):
+    def __init__(self, env):
+        self.environment = env
+        print("Start load config")
+        self.load_all_configs()
+        print("Finished load config")
+        pass
+
+    def build(self):
+        print("Start building")
+        pass
