@@ -117,7 +117,7 @@ class InternalBackend(CommonBackend):
     def _init(self):
         CommonBackend._init(self)
 
-        json_configs = self.json_configs = {
+        all_configs = {
             'topdirs': {},
             'srcdirs': {},
             'garbages': set(),
@@ -130,19 +130,9 @@ class InternalBackend(CommonBackend):
             'paths_to_defines': {},
             'libs_to_paths': {},
         }
+        self._init_with(all_configs)
 
         self._paths_to_configs = {}
-
-        self._topdirs_config = self.json_configs['topdirs']
-        self._garbages = self.json_configs['garbages']
-        self._python_unit_tests = json_configs['python_unit_tests']
-
-        self._paths_to_unifies = json_configs['paths_to_unifies']
-        self._paths_to_sources = json_configs['paths_to_sources']
-        self._path_to_unified_sources  = json_configs['path_to_unified_sources']
-        self._paths_to_includes = json_configs['paths_to_includes']
-        self._paths_to_defines = json_configs['paths_to_defines']
-        self._libs_to_paths = json_configs['libs_to_paths']
 
         self._install_manifests = {
             k: InstallManifest() for k in [
@@ -174,13 +164,26 @@ class InternalBackend(CommonBackend):
             self.summary)
         self.typeSet = set()
 
+    def _init_with(self, all_configs):
+        self.all_configs = all_configs
+        self._topdirs_config = all_configs['topdirs']
+        self._garbages = all_configs['garbages']
+        self._python_unit_tests = all_configs['python_unit_tests']
+
+        self._paths_to_unifies = all_configs['paths_to_unifies']
+        self._paths_to_sources = all_configs['paths_to_sources']
+        self._path_to_unified_sources  = all_configs['path_to_unified_sources']
+        self._paths_to_includes = all_configs['paths_to_includes']
+        self._paths_to_defines = all_configs['paths_to_defines']
+        self._libs_to_paths = all_configs['libs_to_paths']
+
     def _add_jar_install_list(self, obj, installList, preprocessor = False):
         for s,d in installList:
             target = mozpath.relpath(d, obj.topobjdir)
             self._process_files(obj, [s], target, preprocessor = preprocessor, marker='jar', target_is_file = True)
 
     def _get_config(self, srcdir):
-        return self.json_configs['srcdirs'].setdefault(srcdir, {})
+        return self.all_configs['srcdirs'].setdefault(srcdir, {})
 
     def _compute_xul_flags(self, config):
         substs = config.substs
@@ -480,7 +483,7 @@ class InternalBackend(CommonBackend):
     def consume_finished(self):
         CommonBackend.consume_finished(self)
         print(self.typeSet)
-        #print(self.json_configs)
+        #print(self.all_configs)
         #self.print_list(self._garbages)
         #self.print_list(self._python_unit_tests)
         #self.print_list(self.backend_input_files) # moz.build files
@@ -542,23 +545,23 @@ class InternalBackend(CommonBackend):
                 self._get_manifest_from_target('dist/include')[0].add_optional_exists(
                         mozpath.relpath(f, include_dir))
     @property
-    def configs_pickle_path(self):
+    def all_configs_path(self):
         return mozpath.join(self.environment.topobjdir, 'all_config.pickle')
 
     def save_all_configs(self):
         import cPickle
-        with open(self.configs_pickle_path, 'wb') as fh:
-            cPickle.dump(self.json_configs, fh, -1)
+        with open(self.all_configs_path, 'wb') as fh:
+            cPickle.dump(self.all_configs, fh, -1)
 
     def load_all_configs(self):
         def new_setitem(self, key, value):
             dict.__setitem__(self, key, value)
 
-        with open(self.configs_pickle_path, 'rb') as fh:
+        with open(self.all_configs_path, 'rb') as fh:
             import cPickle
             saved_setitem = ReadOnlyDict.__setitem__
             ReadOnlyDict.__setitem__ = new_setitem
-            cPickle.load(fh)
+            self._init_with(cPickle.load(fh))
             ReadOnlyDict.__setitem__ = saved_setitem
 
 class InternalBuild(InternalBackend):
