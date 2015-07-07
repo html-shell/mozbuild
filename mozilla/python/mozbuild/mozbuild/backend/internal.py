@@ -138,6 +138,7 @@ class InternalBackend(CommonBackend):
             'backend_input_files': set(),
             'backend_output_files': set(),
             'test_manifests': {},
+            'chrome_files': set(),
         }
         self._init_with(all_configs)
 
@@ -190,6 +191,7 @@ class InternalBackend(CommonBackend):
         self.backend_input_files = all_configs['backend_input_files']
         self._backend_output_files = all_configs['backend_output_files']
         self._test_manifests = all_configs['test_manifests']
+        self._chrome_set = all_configs['chrome_files']
 
     def _add_jar_install_list(self, obj, installList, preprocessor = False):
         for s,d in installList:
@@ -331,7 +333,8 @@ class InternalBackend(CommonBackend):
                 '-f', 'flat',
                 '-c', mozpath.join(localedir, obj.config.substs['AB_CD']),
             ]
-            mozbuild.jar.main(jarArgs + self.XULPPFLAGS + defines + [obj.path])
+            mozbuild.jar.main(jarArgs + self.XULPPFLAGS + defines + [obj.path],
+                chromeSet = self._chrome_set)
             jm = mozbuild.jar.jm
             self._add_jar_install_list(obj, jm.installList)
             self._add_jar_install_list(obj, jm.processList, True)

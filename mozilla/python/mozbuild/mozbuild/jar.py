@@ -24,7 +24,7 @@ from mozbuild.util import (
 
 import mozpack.path as mozpath
 from mozbuild.preprocessor import Preprocessor
-from mozbuild.action.buildlist import addEntriesToListFile
+from mozbuild.action import buildlist
 if sys.platform == 'win32':
     from ctypes import windll, WinError
     CreateHardLink = windll.kernel32.CreateHardLinkA
@@ -155,6 +155,18 @@ class JarMaker(object):
             logging.info('WARNING: Includes produce non-empty output')
         self.pp.out = None
 
+    def checkChromeFile(self, manifestPath):
+        if self.options.outputList:
+            manifestNormalPath = mozpath.normpath(manifestPath)
+            if manifestNormalPath not in self.chromeSet:
+                if os.path.exists(manifestPath):
+                    os.remove(manifestPath)
+                self.chromeSet.add(manifestNormalPath)
+
+    def addEntriesToListFile(self, listFile, entries):
+        self.checkChromeFile(listFile)
+        buildlist.addEntriesToListFile(listFile, entries)
+
     def finalizeJar(self, jarPath, chromebasepath, register, doZip=True):
         '''Helper method to write out the chrome registration entries to
          jarfile.manifest or chrome.manifest, or both.
@@ -172,7 +184,7 @@ class JarMaker(object):
         if self.useJarfileManifest:
             self.updateManifest(jarPath + '.manifest',
                                 chromebasepath.format(''), register)
-            addEntriesToListFile(chromeManifest,
+            self.addEntriesToListFile(chromeManifest,
                                  ['manifest chrome/{0}.manifest'.format(os.path.basename(jarPath))])
         if self.useChromeManifest:
             self.updateManifest(chromeManifest,
@@ -192,7 +204,7 @@ class JarMaker(object):
                 os.path.basename(os.path.dirname(os.path.normpath(chromeManifest)))
             logging.info("adding '%s' entry to root chrome manifest appid=%s"
                           % (chromeDir, self.rootManifestAppId))
-            addEntriesToListFile(rootChromeManifest,
+            self.addEntriesToListFile(rootChromeManifest,
                                  ['manifest %s/chrome.manifest application=%s'
                                   % (chromeDir,
                                  self.rootManifestAppId)])
@@ -202,6 +214,7 @@ class JarMaker(object):
         with the given chrome base path, and updates the given manifest file.
         '''
 
+        self.checkChromeFile(manifestPath)
         lock = lock_file(manifestPath + '.lck')
         try:
             myregister = dict.fromkeys(map(lambda s: s.replace('%',
@@ -501,10 +514,11 @@ class JarMaker(object):
 
 jm = None
 
-def main(args=None):
+def main(args=None, chromeSet = None):
     global jm
     args = args or sys.argv
     jm = JarMaker()
+    jm.chromeSet = chromeSet
     p = jm.getCommandLineParser()
     (options, args) = p.parse_args(args)
     jm.options = options
