@@ -321,7 +321,7 @@ class InstallManifest(object):
                 continue
 
             if install_type in (self.REQUIRED_EXISTS, self.OPTIONAL_EXISTS):
-                registry.add(dest, ExistingFile(install_type==self.REQUIRED_EXISTS), self._decode_field_entry(entry[1]))
+                registry.add(dest, ExistingFile(install_type==self.REQUIRED_EXISTS, self._decode_field_entry(entry[1])))
                 continue
 
             if install_type in (self.PATTERN_SYMLINK, self.PATTERN_COPY):

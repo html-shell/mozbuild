@@ -11,8 +11,10 @@ from xml.dom import getDOMImplementation
 
 from mozpack.files import FileFinder
 from reftest import ReftestManifest
-
-from mozpack.copier import FilePurger
+from mozbuild.action.process_install_manifest import process_manifest
+from mozpack.copier import (
+    FilePurger,
+)
 from mozpack.manifests import (
     InstallManifest,
 )
@@ -143,7 +145,9 @@ class InternalBackend(CommonBackend):
 
         self._install_manifests = {
             k: InstallManifest() for k in [
-                'all_manifests']
+                'dist',
+                'tests'
+            ]
         }
         '''
         self._install_manifests = {
@@ -190,7 +194,7 @@ class InternalBackend(CommonBackend):
     def _add_jar_install_list(self, obj, installList, preprocessor = False):
         for s,d in installList:
             target = mozpath.relpath(d, obj.topobjdir)
-            self._process_files(obj, [s], target, preprocessor = preprocessor, marker='jar', target_is_file = True)
+            self._process_files(obj, [s], target, preprocessor = preprocessor, marker='', target_is_file = True)
 
     def _get_config(self, srcdir):
         return self.all_configs['srcdirs'].setdefault(srcdir, {})
@@ -443,8 +447,6 @@ class InternalBackend(CommonBackend):
         raise Exception('Unsupported JavaScriptModules instance: %s' % obj.flavor)
 
     def _get_manifest_from_target(self, target):
-        return self._install_manifests['all_manifests'], target
-
         prefix_list = [
             'dist/bin',
             'dist/idl',
@@ -456,6 +458,10 @@ class InternalBackend(CommonBackend):
             'dist/branding',
             'tests',
             'xpidl',
+        ]
+        prefix_list = [
+            'dist',
+            'tests',
         ]
         for prefix in prefix_list:
             if target == prefix or target.startswith(prefix + '/'):
@@ -471,7 +477,15 @@ class InternalBackend(CommonBackend):
             dest = reltarget if target_is_file else mozpath.join(reltarget, mozpath.basename(f))
             if preprocessor:
                 dep_file = mozpath.join(self.dep_path, target, mozpath.basename(f) +'.pp')
-                install_manifest.add_preprocess(source, dest, dep_file, marker=marker, defines=obj.srcdir)
+                exist_defines = self._paths_to_defines.get(obj.srcdir, {})
+
+                xul_defines = dict(exist_defines)
+                for flag in self.XULPPFLAGS:
+                    if flag.startswith('-D'):
+                        define = flag[2:].split('=')
+                        xul_defines[define[0]] = define[1] if len(define) >= 2 else ''
+                defines = compute_defines(obj.config, defines = xul_defines)
+                install_manifest.add_preprocess(source, dest, dep_file, marker=marker, defines=defines)
             else:
                 install_manifest.add_symlink(source, dest)
 
@@ -593,7 +607,8 @@ class InternalBackend(CommonBackend):
             dep_file = mozpath.join(self.dep_path, xpt_path + '.pp')
             install_manifest, reltarget = self._get_manifest_from_target(xpt_path)
             #The .idl related .h fiels is also genreated by this preprocess
-            install_manifest.add_preprocess(deps, reltarget, dep_file, marker='xpt')
+            #install_manifest.add_preprocess(deps, reltarget, dep_file, marker='xpt')
+            # TODO, handle xpt generate
 
     def _handle_ipdl_sources(self, ipdl_dir,
         sorted_ipdl_sources, unified_ipdl_cppsrcs_mapping
@@ -642,8 +657,11 @@ class InternalBuild(InternalBackend):
 
     def build(self):
         print("Start building")
-        for k in self.all_configs:
-            print(k)
-        for k in self.all_configs['backend_input_files']:
-            print(k)
-        pass
+        manifest_lsit = [
+            #'tests',
+            'dist'
+        ]
+        for d in manifest_lsit:
+            manifests_filepath = mozpath.join(self.environment.topobjdir, '_build_manifests/install', d)
+            dest_dir = mozpath.join(self.environment.topobjdir, d)
+            process_manifest(dest_dir, [manifests_filepath])

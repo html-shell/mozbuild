@@ -359,8 +359,9 @@ class ExistingFile(BaseFile):
     existing file is required, it must exist during copy() or an error is
     raised.
     '''
-    def __init__(self, required):
+    def __init__(self, required, deps):
         self.required = required
+        self.deps = deps
 
     def copy(self, dest, skip_if_older=True):
         if isinstance(dest, basestring):
