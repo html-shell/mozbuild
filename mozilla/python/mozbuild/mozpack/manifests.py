@@ -136,13 +136,13 @@ class InstallManifest(object):
                 continue
 
             if record_type == self.REQUIRED_EXISTS:
-                _, path = fields
-                self.add_required_exists(path)
+                _, path, deps = fields
+                self.add_required_exists(path, self._decode_field_entry(deps))
                 continue
 
             if record_type == self.OPTIONAL_EXISTS:
-                _, path = fields
-                self.add_optional_exists(path)
+                _, path, deps = fields
+                self.add_optional_exists(path, self._decode_field_entry(deps))
                 continue
 
             if record_type == self.PATTERN_SYMLINK:
@@ -242,21 +242,21 @@ class InstallManifest(object):
         """
         self._add_entry(dest, (self.COPY, source))
 
-    def add_required_exists(self, dest):
+    def add_required_exists(self, dest, deps = []):
         """Record that a destination file must exist.
 
         This effectively prevents the listed file from being deleted.
         """
-        self._add_entry(dest, (self.REQUIRED_EXISTS,))
+        self._add_entry(dest, (self.REQUIRED_EXISTS, self._encode_field_entry(deps)))
 
-    def add_optional_exists(self, dest):
+    def add_optional_exists(self, dest, deps = []):
         """Record that a destination file may exist.
 
         This effectively prevents the listed file from being deleted. Unlike a
         "required exists" file, files of this type do not raise errors if the
         destination file does not exist.
         """
-        self._add_entry(dest, (self.OPTIONAL_EXISTS,))
+        self._add_entry(dest, (self.OPTIONAL_EXISTS, self._encode_field_entry(deps)))
 
     def add_pattern_symlink(self, base, pattern, dest):
         """Add a pattern match that results in symlinks being created.
@@ -320,12 +320,8 @@ class InstallManifest(object):
                 registry.add(dest, File(entry[1]))
                 continue
 
-            if install_type == self.REQUIRED_EXISTS:
-                registry.add(dest, ExistingFile(required=True))
-                continue
-
-            if install_type == self.OPTIONAL_EXISTS:
-                registry.add(dest, ExistingFile(required=False))
+            if install_type in (self.REQUIRED_EXISTS, self.OPTIONAL_EXISTS):
+                registry.add(dest, ExistingFile(install_type==self.REQUIRED_EXISTS), self._decode_field_entry(entry[1]))
                 continue
 
             if install_type in (self.PATTERN_SYMLINK, self.PATTERN_COPY):

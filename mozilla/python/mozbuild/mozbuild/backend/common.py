@@ -59,6 +59,7 @@ class XPIDLManager(object):
             'module': module,
             'basename': basename,
             'root': root,
+            'install_target': install_target,
         }
 
         if not allow_existing and entry['basename'] in self.idls:
