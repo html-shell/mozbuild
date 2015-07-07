@@ -473,11 +473,16 @@ class InternalBackend(CommonBackend):
                 return (install_manifest, reltarget)
         raise Exception("Cannot install to " + target)
 
-    def _process_files(self, obj, files, target, preprocessor = False, marker='#', target_is_file=False):
-        install_manifest, reltarget = self._get_manifest_from_target(target)
+    def _process_files(self, obj, files, target, preprocessor = False, marker='#', target_is_file=False, optional=False):
         for f in files:
-            source = mozpath.normpath(mozpath.join(obj.srcdir, f))
-            dest = reltarget if target_is_file else mozpath.join(reltarget, mozpath.basename(f))
+            if optional:
+                full_dest = f
+            elif target_is_file:
+                full_dest = target
+            else:
+                full_dest = mozpath.join(target, mozpath.basename(f))
+            install_manifest, dest = self._get_manifest_from_target(full_dest)
+            source = None if (obj is None) else mozpath.normpath(mozpath.join(obj.srcdir, f))
             if preprocessor:
                 dep_file = mozpath.join(self.dep_path, target, mozpath.basename(f) +'.pp')
                 exist_defines = self._paths_to_defines.get(obj.srcdir, {})
@@ -489,6 +494,8 @@ class InternalBackend(CommonBackend):
                         xul_defines[define[0]] = define[1] if len(define) >= 2 else ''
                 defines = compute_defines(obj.config, defines = xul_defines)
                 install_manifest.add_preprocess(source, dest, dep_file, marker=marker, defines=defines)
+            elif optional:
+                install_manifest.add_optional_exists(dest)
             else:
                 install_manifest.add_symlink(source, dest)
 
@@ -566,6 +573,8 @@ class InternalBackend(CommonBackend):
         #self.print_list(self._extra_pp_components)
         #self.print_list(self._js_preference_files)
 
+        chrome_files = sorted([mozpath.relpath(p, self.environment.topobjdir) for p in self._chrome_set])
+        self._process_files(None, chrome_files, '', optional=True)
         self._write_manifests('install', self._install_manifests)
         ensureParentDir(mozpath.join(self.environment.topobjdir, 'dist', 'foo'))
         self.save_all_configs()
