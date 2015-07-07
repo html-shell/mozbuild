@@ -270,16 +270,19 @@ class InstallManifest(object):
 
            <base>/foo/bar.h -> <dest>/foo/bar.h
         """
-        self._add_entry(mozpath.join(base, pattern, dest),
-            (self.PATTERN_SYMLINK, base, pattern, dest))
+        self._add_pattern(base, pattern, dest, self.PATTERN_SYMLINK)
 
     def add_pattern_copy(self, base, pattern, dest):
         """Add a pattern match that results in copies.
 
         See ``add_pattern_symlink()`` for usage.
         """
-        self._add_entry(mozpath.join(base, pattern, dest),
-            (self.PATTERN_COPY, base, pattern, dest))
+        self._add_pattern(base, pattern, dest, self.PATTERN_COPY)
+
+    def _add_pattern(self, base, pattern, dest, pattern_type):
+        dest = mozpath.normpath(dest)
+        self._add_entry('%s|%s|%s' % (dest, base, pattern),
+            (pattern_type, base, pattern, dest), normlize_dest=False)
 
     def add_preprocess(self, source, dest, deps, marker='#', defines={}):
         """Add a preprocessed file to this manifest.
@@ -290,8 +293,9 @@ class InstallManifest(object):
         self._add_entry(dest,
             (self.PREPROCESS, self._encode_field_entry(source), deps, marker, self._encode_field_entry(defines)))
 
-    def _add_entry(self, dest, entry):
-        dest = mozpath.normpath(dest)
+    def _add_entry(self, dest, entry, normlize_dest = True):
+        if normlize_dest:
+          dest = mozpath.normpath(dest)
         if dest in self._dests:
             raise ValueError('Item already in manifest: %s' % dest)
 
