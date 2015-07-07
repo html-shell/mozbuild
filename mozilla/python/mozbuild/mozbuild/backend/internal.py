@@ -19,6 +19,10 @@ from mozpack.manifests import (
 import mozbuild.jar
 import mozpack.path as mozpath
 
+from .base import (
+    BuildBackend
+)
+
 from .common import (
     CommonBackend,
     XPIDLManager,
@@ -129,6 +133,8 @@ class InternalBackend(CommonBackend):
             'paths_to_includes': {},
             'paths_to_defines': {},
             'libs_to_paths': {},
+            'backend_input_files': set(),
+            'backend_output_files': set(),
         }
         self._init_with(all_configs)
 
@@ -176,6 +182,8 @@ class InternalBackend(CommonBackend):
         self._paths_to_includes = all_configs['paths_to_includes']
         self._paths_to_defines = all_configs['paths_to_defines']
         self._libs_to_paths = all_configs['libs_to_paths']
+        self.backend_input_files = all_configs['backend_input_files']
+        self._backend_output_files = all_configs['backend_output_files']
 
     def _add_jar_install_list(self, obj, installList, preprocessor = False):
         for s,d in installList:
@@ -414,7 +422,7 @@ class InternalBackend(CommonBackend):
             dest = reltarget if target_is_file else mozpath.join(reltarget, mozpath.basename(f))
             if preprocessor:
                 dep_file = mozpath.join(self.dep_path, target, mozpath.basename(f) +'.pp')
-                install_manifest.add_preprocess(source, dest, dep_file, marker=marker)
+                install_manifest.add_preprocess(source, dest, dep_file, marker=marker, defines=obj.srcdir)
             else:
                 install_manifest.add_symlink(source, dest)
 
@@ -565,13 +573,18 @@ class InternalBackend(CommonBackend):
             ReadOnlyDict.__setitem__ = saved_setitem
 
 class InternalBuild(InternalBackend):
-    def __init__(self, env):
-        self.environment = env
-        print("Start load config")
+    def __init__(self, environment):
+        BuildBackend.__init__(self, environment)
+        pass
+
+    def _init(self):
         self.load_all_configs()
-        print("Finished load config")
         pass
 
     def build(self):
         print("Start building")
+        for k in self.all_configs:
+            print(k)
+        for k in self.all_configs['backend_input_files']:
+            print(k)
         pass
