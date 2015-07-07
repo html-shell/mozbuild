@@ -135,6 +135,7 @@ class InternalBackend(CommonBackend):
             'libs_to_paths': {},
             'backend_input_files': set(),
             'backend_output_files': set(),
+            'test_manifests': {},
         }
         self._init_with(all_configs)
 
@@ -184,6 +185,7 @@ class InternalBackend(CommonBackend):
         self._libs_to_paths = all_configs['libs_to_paths']
         self.backend_input_files = all_configs['backend_input_files']
         self._backend_output_files = all_configs['backend_output_files']
+        self._test_manifests = all_configs['test_manifests']
 
     def _add_jar_install_list(self, obj, installList, preprocessor = False):
         for s,d in installList:
@@ -198,28 +200,74 @@ class InternalBackend(CommonBackend):
         XULPPFLAGS = substs['MOZ_DEBUG_ENABLE_DEFS'] if substs['MOZ_DEBUG'] else substs['MOZ_DEBUG_DISABLE_DEFS']
         self.XULPPFLAGS = XULPPFLAGS.split(' ')
 
-    def consume_object(self, obj):
-        srcdir = getattr(obj, 'srcdir', None)
+    def _process_test_manifest(self, obj):
+        # Much of the logic in this function could be moved to CommonBackend.
+        self.backend_input_files.add(mozpath.join(obj.topsrcdir,
+            obj.manifest_relpath))
 
-        if not isinstance(obj, DirectoryTraversal) and isinstance(obj, ContextDerived):
-            all_contextes = self._get_config(srcdir).setdefault('all_contextes', [])
-            new_context = copy.copy(obj)
-            new_context.config = None
-            all_contextes.append(new_context)
+        test_manifests, reltarget = self._get_manifest_from_target('tests')
+        # Don't allow files to be defined multiple times unless it is allowed.
+        # We currently allow duplicates for non-test files or test files if
+        # the manifest is listed as a duplicate.
+        for source, (dest, is_test) in obj.installs.items():
+            try:
+                test_manifests.add_symlink(source, mozpath.join(reltarget, dest))
+            except ValueError:
+                if not obj.dupe_manifest and is_test:
+                    raise
+
+        for base, pattern, dest in obj.pattern_installs:
+            try:
+                test_manifests.add_pattern_symlink(base,
+                    pattern, mozpath.join(reltarget, dest))
+            except ValueError:
+                if not obj.dupe_manifest:
+                    raise
+
+        for dest in obj.external_installs:
+            try:
+                test_manifests.add_optional_exists(mozpath.join(reltarget, dest))
+            except ValueError:
+                if not obj.dupe_manifest:
+                    raise
+
+        m = self._test_manifests.setdefault(obj.flavor,
+            (obj.install_prefix, set()))
+        m[1].add(obj.manifest_obj_relpath)
+
+        if isinstance(obj.manifest, ReftestManifest):
+            # Mark included files as part of the build backend so changes
+            # result in re-config.
+            self.backend_input_files |= obj.manifest.manifests
+
+    def consume_object(self, obj):
+        if not isinstance(obj, ContextDerived):
+            return
+
+        srcdir = obj.srcdir
 
         if isinstance(obj, DirectoryTraversal):
-            self._paths_to_configs[obj.srcdir] = obj.config
+            self._paths_to_configs[srcdir] = obj.config
             if not self._topdirs_config.has_key(obj.topsrcdir):
                 self._compute_xul_flags(obj.config)
                 config = obj.config.to_dict()
                 self._topdirs_config[obj.topsrcdir] = config
             self._get_config(srcdir)['target'] = obj.target
             self._get_config(srcdir)['topsrcdir'] = obj.topsrcdir
+        else:
+            all_contextes = self._get_config(srcdir).setdefault('all_contextes', [])
+            new_context = copy.copy(obj)
+            all_contextes.append(new_context)
 
-        elif isinstance(obj, ContextDerived) and CommonBackend.consume_object(self, obj):
+        CommonBackend.consume_object(self, obj)
+
+        if isinstance(obj, TestManifest):
+            self._process_test_manifest(obj)
+
+        if obj._ack:
             return
 
-        elif isinstance(obj, Sources):
+        if isinstance(obj, Sources):
             self._add_sources(srcdir, obj)
 
         elif isinstance(obj, HostSources):
@@ -386,9 +434,9 @@ class InternalBackend(CommonBackend):
             return
 
         if obj.flavor == 'testing':
-            manifest, _ = self._get_manifest_from_target('tests')
+            manifest, target = self._get_manifest_from_target('tests')
             for source, dest, _ in self._walk_hierarchy(obj, obj.modules):
-                manifest.add_symlink(source, mozpath.join('modules', dest))
+                manifest.add_symlink(source, mozpath.join(target, 'modules', dest))
             return
 
         raise Exception('Unsupported JavaScriptModules instance: %s' % obj.flavor)
@@ -527,7 +575,7 @@ class InternalBackend(CommonBackend):
         xpt_modules = sorted(manager.modules.keys())
         for module in xpt_modules:
             install_target, sources = manager.modules[module]
-            deps = sorted(sources)
+            deps =[mozpath.join(self.environment.topobjdir, 'dist/idl', p + '.idl') for p in sorted(sources)]
 
             target = mozpath.join(install_target, 'components')
             install_manifest, reltarget = self._get_manifest_from_target(target)

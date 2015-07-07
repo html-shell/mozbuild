@@ -291,6 +291,7 @@ class InstallManifest(object):
             (self.PREPROCESS, self._encode_field_entry(source), deps, marker, self._encode_field_entry(defines)))
 
     def _add_entry(self, dest, entry):
+        dest = mozpath.normpath(dest)
         if dest in self._dests:
             raise ValueError('Item already in manifest: %s' % dest)
 
