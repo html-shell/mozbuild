@@ -138,6 +138,7 @@ class InternalBackend(CommonBackend):
             'backend_input_files': set(),
             'backend_output_files': set(),
             'test_manifests': {},
+            'xpt_list': [],
             'chrome_files': set(),
         }
         self._init_with(all_configs)
@@ -192,6 +193,7 @@ class InternalBackend(CommonBackend):
         self._backend_output_files = all_configs['backend_output_files']
         self._test_manifests = all_configs['test_manifests']
         self._chrome_set = all_configs['chrome_files']
+        self._xpt_list = all_configs['xpt_list']
 
     def _add_jar_install_list(self, obj, installList, preprocessor = False):
         for s,d in installList:
@@ -619,11 +621,11 @@ class InternalBackend(CommonBackend):
             deps =[mozpath.join(self.environment.topobjdir, 'dist/idl', p + '.idl') for p in sorted(sources)]
 
             xpt_path = self.get_xpt_path_from_idl_module(manager, module)
-            dep_file = mozpath.join(self.dep_path, xpt_path + '.pp')
             install_manifest, reltarget = self._get_manifest_from_target(xpt_path)
-            #The .idl related .h fiels is also genreated by this preprocess
-            #install_manifest.add_preprocess(deps, reltarget, dep_file, marker='xpt')
-            # TODO, handle xpt generate
+            install_manifest.add_optional_exists(reltarget)
+
+            dep_file = mozpath.join(self.dep_path, xpt_path + '.pp')
+            self._xpt_list.append((xpt_path, deps, dep_file))
 
     def _handle_ipdl_sources(self, ipdl_dir,
         sorted_ipdl_sources, unified_ipdl_cppsrcs_mapping
@@ -661,22 +663,92 @@ class InternalBackend(CommonBackend):
             self._init_with(cPickle.load(fh))
             ReadOnlyDict.__setitem__ = saved_setitem
 
+import Queue as queue
+
 class InternalBuild(InternalBackend):
     def __init__(self, environment):
         BuildBackend.__init__(self, environment)
-        pass
+        self.depsJson = os.path.join(self.environment.topobjdir, 'deps.json')
+        self.manifests_root = mozpath.join(self.environment.topobjdir, '_build_manifests/install')
 
     def _init(self):
         self.load_all_configs()
         pass
 
     def build(self):
+        self.loadDependencies()
         print("Start building")
-        manifest_lsit = [
+        manifest_list = [
             #'tests',
             'dist'
         ]
-        for d in manifest_lsit:
-            manifests_filepath = mozpath.join(self.environment.topobjdir, '_build_manifests/install', d)
+        for d in manifest_list:
             dest_dir = mozpath.join(self.environment.topobjdir, d)
-            process_manifest(dest_dir, [manifests_filepath])
+            manifests_filepath = mozpath.join(self.manifests_root, d)
+            process_manifest(dest_dir, [manifests_filepath], remove_all_directory_symlinks=False)
+
+    def addDependencies(self, target, deps):
+        if not target in self.newDeps:
+            self.newDeps[target] = set()
+        for p in deps:
+            p = normalizePath(p)
+            self.newDeps[target].add(p)
+            self.sourceFiles.add(p)
+
+    def loadDependencies(self):
+        self.oldDeps,timeStamps = loadPickle(self.depsJson, ({},{}))
+
+        g = {}
+        for u,edges in self.oldDeps.items():
+            for v in edges:
+                if not v in g:
+                    g[v] = []
+                g[v].append(u)
+            pass
+
+        q =  queue.Queue()
+        for p,t in timeStamps.items():
+            if not os.path.exists(p) or long(os.stat(p).st_mtime) != t:
+                self.modifiedTarget.add(p)
+                q.put(p)
+        while not q.empty():
+            p = q.get_nowait()
+            if not p in g:
+                continue
+            for v in g[p]:
+                if v in self.modifiedTarget:
+                    continue
+                self.modifiedTarget.add(v)
+                q.put(v)
+
+    def dumpDependencies(self):
+        timeStamps = {}
+        # It's should be here to check the last modification time, for the correctness
+        try:
+            for p in self.sourceFiles:
+                timeStamps[p] = long(os.stat(p).st_mtime)
+        except:
+            return
+        savePickle(self.depsJson, (self.newDeps, timeStamps))
+
+    def targetNeedBuild(self, targetPath):
+        if os.path.exists(targetPath):
+            if not targetPath in self.modifiedTarget \
+                and targetPath in self.oldDeps:
+                self.addDependencies(targetPath, self.oldDeps[targetPath])
+                return False
+        return True
+
+def loadPickle(picklePath, default=None):
+    try:
+        f = open(picklePath, 'rb')
+        content = pickle.load(f)
+        f.close()
+        return content
+    except:
+        return default
+
+def savePickle(picklePath, content):
+    f = open(picklePath, 'wb')
+    pickle.dump(content, f)
+    f.close()

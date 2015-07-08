@@ -2,6 +2,7 @@
 # Use of this source code is governed by the Simplified BSD License which can
 # be found in the LICENSE file.
 
+import os
 import ctypes
 from ctypes import POINTER, WinError, sizeof, byref
 from ctypes.wintypes import DWORD, HANDLE, BOOL
@@ -85,6 +86,20 @@ CloseHandle = ctypes.windll.kernel32.CloseHandle
 CloseHandle.argtypes = [HANDLE]
 CloseHandle.restype = BOOL
 
+FindFirstFileNameW = ctypes.windll.kernel32.FindFirstFileNameW
+FindFirstFileNameW.argtypes = [
+    ctypes.c_wchar_p, DWORD, LPDWORD, ctypes.c_wchar_p
+]
+FindFirstFileNameW.restype = HANDLE
+
+FindNextFileNameW = ctypes.windll.kernel32.FindNextFileNameW
+FindNextFileNameW.argtypes = [HANDLE, LPDWORD, ctypes.c_wchar_p]
+FindNextFileNameW.restype = BOOL
+
+FindClose = ctypes.windll.kernel32.FindClose
+FindClose.argtypes = [HANDLE]
+FindClose.restype = BOOL
+
 def getfileinfo(path):
     """
     Return information for the file at the given path. This is going to be a
@@ -100,18 +115,22 @@ def getfileinfo(path):
         raise WinError()
     return info
 
-def getvolumeinfo(path):
-    """
-    Return information for the volume containing the given path. This is going
-    to be a pair containing (file system, file system flags).
-    """
-
+def getvolumepath(path):
     # Add 1 for a trailing backslash if necessary, and 1 for the terminating
     # null character.
     volpath = ctypes.create_unicode_buffer(len(path) + 2)
     rv = GetVolumePathName(path, volpath, len(volpath))
     if rv == 0:
         raise WinError()
+    return volpath.value
+
+def getvolumeinfo(path):
+    """
+    Return information for the volume containing the given path. This is going
+    to be a pair containing (file system, file system flags).
+    """
+
+    volpath = getvolumepath(path)
 
     fsnamebuf = ctypes.create_unicode_buffer(MAX_PATH + 1)
     fsflags = DWORD(0)
@@ -121,6 +140,24 @@ def getvolumeinfo(path):
         raise WinError()
 
     return (fsnamebuf.value, fsflags.value)
+
+def get_all_hardlinkds(path):
+    all_links = set()
+    volume_root = getvolumepath(path)
+    link_name = ctypes.create_unicode_buffer(65536)
+    link_name_len = DWORD(len(link_name))
+
+    hFind = FindFirstFileNameW(path, 0, byref(link_name_len), link_name)
+    if hFind == INVALID_HANDLE_VALUE:
+        return all_links
+    while True:
+        newLink = os.path.join(volume_root, str(link_name.value))
+        all_links.add(newLink)
+        if FindNextFileNameW(hFind, byref(link_name_len), link_name) != True:
+            break
+    FindClose(hFind)
+    all_links.discard(path)
+    return all_links
 
 def hardlinks_supported(path):
     (fsname, fsflags) = getvolumeinfo(path)

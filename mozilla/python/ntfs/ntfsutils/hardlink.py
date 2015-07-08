@@ -8,8 +8,10 @@ __all__ = ["create", "samefile"]
 
 import fs
 import ctypes
-from ctypes import WinError
-from ctypes.wintypes import BOOL
+import os.path
+from ctypes import POINTER, WinError, sizeof, byref
+from ctypes.wintypes import DWORD, HANDLE, BOOL
+
 CreateHardLink = ctypes.windll.kernel32.CreateHardLinkW
 CreateHardLink.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_void_p]
 CreateHardLink.restype = BOOL
@@ -32,3 +34,14 @@ def samefile(path1, path2):
     return (info1.dwVolumeSerialNumber == info2.dwVolumeSerialNumber and
             info1.nFileIndexHigh == info2.nFileIndexHigh and
             info1.nFileIndexLow == info2.nFileIndexLow)
+
+def is_hardlink(path):
+    info = fs.getfileinfo(path)
+    return info.nNumberOfLinks > 0
+
+def readlink(path):
+    links = fs.get_all_hardlinkds(path)
+    if (len(links) > 0):
+        link = links.pop()
+        return link
+    return None

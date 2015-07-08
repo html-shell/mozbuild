@@ -12,11 +12,56 @@ from mozpack.files import (
 )
 import mozpack.path as mozpath
 import errno
+from ntfsutils import junction
+from ntfsutils import hardlink
 from collections import (
     Counter,
     OrderedDict,
 )
 
+def register_symlink():
+    def new_symlink(source, link_name):
+        if os.path.isdir(source):
+            return junction.create(source, link_name)
+        return hardlink.create(source, link_name)
+
+    def is_symlink(source):
+        if os.path.isdir(source):
+            ret = junction.isjunction(source)
+            return ret
+        return hardlink.is_hardlink(source)
+
+    os.symlink = new_symlink
+
+    exist_lstat = os.lstat
+    def new_lstat(path):
+        import nt
+        st = exist_lstat(path)
+        if is_symlink(path):
+            new_mode = st.st_mode | stat.S_IFLNK
+            new_mode &= ~stat.S_IFDIR
+            statRedult = [new_mode, st.st_ino, st.st_dev, st.st_nlink, st.st_uid, st.st_gid, st.st_size, st.st_atime, st.st_mtime, st.st_ctime]
+            new_st = nt.stat_result(statRedult)
+            return new_st
+        return st
+    os.lstat = new_lstat
+
+    def new_readlink(path):
+        if os.path.isdir(path):
+            return junction.readlink(path)
+        return hardlink.readlink(path)
+    os.readlink = new_readlink
+
+    exist_remove = os.remove
+    def new_remove(path):
+        if os.path.isdir(path) and is_symlink(path):
+            junction.unlink(path)
+        else:
+            exist_remove(path)
+    os.remove = new_remove
+    os.unlink = new_remove
+
+register_symlink()
 
 class FileRegistry(object):
     '''
