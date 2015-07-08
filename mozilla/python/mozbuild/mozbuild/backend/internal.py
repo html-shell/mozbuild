@@ -196,7 +196,7 @@ class InternalBackend(CommonBackend):
     def _add_jar_install_list(self, obj, installList, preprocessor = False):
         for s,d in installList:
             target = mozpath.relpath(d, obj.topobjdir)
-            self._process_files(obj, [s], target, preprocessor = preprocessor, marker='', target_is_file = True)
+            self._process_files(obj, [s], target, preprocessor = preprocessor, marker='jar', target_is_file = True)
 
     def _get_config(self, srcdir):
         return self.all_configs['srcdirs'].setdefault(srcdir, {})
@@ -493,7 +493,10 @@ class InternalBackend(CommonBackend):
                         define = flag[2:].split('=')
                         xul_defines[define[0]] = define[1] if len(define) >= 2 else ''
                 defines = compute_defines(obj.config, defines = xul_defines)
-                install_manifest.add_preprocess(source, dest, dep_file, marker=marker, defines=defines)
+                new_marker = marker
+                if marker == 'jar':
+                    new_marker = '%' if f.endswith('.css') else '#'
+                install_manifest.add_preprocess(source, dest, dep_file, marker=new_marker, defines=defines)
             elif optional:
                 install_manifest.add_optional_exists(dest)
             else:
