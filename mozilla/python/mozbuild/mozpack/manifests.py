@@ -233,7 +233,8 @@ class InstallManifest(object):
 
         dest will be a symlink to source.
         """
-        self._add_entry(dest, (self.SYMLINK, source))
+        #self._add_entry(dest, (self.SYMLINK, source))
+        self._add_entry(dest, (self.COPY, source))
 
     def add_copy(self, source, dest):
         """Add a copy to this manifest.
