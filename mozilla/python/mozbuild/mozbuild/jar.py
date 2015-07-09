@@ -39,7 +39,6 @@ def checkChromeFile(chromeSet, manifestPath):
         return False
     if os.path.exists(manifestPath):
         os.remove(manifestPath)
-    print(manifestNormalPath)
     chromeSet.add(manifestNormalPath)
     return True
 
