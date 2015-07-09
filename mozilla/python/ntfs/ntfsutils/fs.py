@@ -191,7 +191,8 @@ def win_error(error, filename):
 def attributes_to_mode(data, attributes):
     """Convert Win32 dwFileAttributes to st_mode."""
     mode = 0
-    if attributes & FILE_ATTRIBUTE_DIRECTORY:
+    if attributes & FILE_ATTRIBUTE_DIRECTORY and \
+        not (attributes & FILE_ATTRIBUTE_REPARSE_POINT):
         mode |= stat.S_IFDIR | 0o111
     else:
         mode |= stat.S_IFREG
@@ -200,7 +201,7 @@ def attributes_to_mode(data, attributes):
     else:
         mode |= 0o666
     if attributes & FILE_ATTRIBUTE_REPARSE_POINT or \
-        data.nNumberOfLinks > 0:
+        data.nNumberOfLinks >= 2:
         mode |= stat.S_IFLNK
     return mode
 

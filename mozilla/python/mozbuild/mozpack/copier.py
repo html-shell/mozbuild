@@ -361,6 +361,8 @@ class FileCopier(FileRegistry):
 
         # Remove files no longer accounted for.
         if remove_unaccounted:
+            for f in dest_files - existing_files:
+                print('Target file ' + f + ' not generated.')
             for f in existing_files - dest_files:
                 # Windows requires write access to remove files.
                 if os.name == 'nt' and not os.access(f, os.W_OK):
