@@ -22,7 +22,7 @@ def create(source, link_name):
     """
     res = CreateHardLink(link_name, source, None)
     if res == 0:
-        raise WinError()
+        raise fs.win_error(ctypes.GetLastError(), source)
 
 def samefile(path1, path2):
     """

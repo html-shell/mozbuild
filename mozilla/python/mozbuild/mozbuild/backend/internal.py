@@ -699,7 +699,7 @@ class InternalBackend(CommonBackend):
 
         q =  queue.Queue()
         for p,t in timeStamps.items():
-            if not os.path.exists(p) or long(os.stat(p).st_mtime) != t:
+            if not os.path.exists(p) or (os.stat(p).st_mtime != t.st_mtime):
                 self.modifiedTarget.add(p)
                 q.put(p)
         while not q.empty():
@@ -717,33 +717,44 @@ class InternalBackend(CommonBackend):
         # It's should be here to check the last modification time, for the correctness
         try:
             for p in self.sourceFiles:
-                timeStamps[p] = long(os.stat(p).st_mtime)
+                timeStamps[p] = os.stat(p)
         except:
             return
         savePickle(self.depsJson, (self.newDeps, timeStamps))
 
     def targetNeedBuild(self, targetPath):
-        if os.path.exists(targetPath):
-            if not targetPath in self.modifiedTarget \
-                and targetPath in self.oldDeps:
-                self.addDependencies(targetPath, self.oldDeps[targetPath])
-                return False
+        if not os.path.exists(targetPath):
+            return True
+
+        if not targetPath in self.modifiedTarget \
+            and targetPath in self.oldDeps:
+            self.addDependencies(targetPath, self.oldDeps[targetPath])
+            return False
         return True
 
     def firstBuild(self):
-        self.loadDependencies()
         print("Start building")
         manifest_list = [
             #'tests',
             'dist'
         ]
 
+        COMPLETE = 'From {dest}: Kept {existing} existing; Added/updated {updated}; ' \
+            'Removed {rm_files} files and {rm_dirs} directories.'
+
         config = self.environment
         for d in manifest_list:
             dest_dir = mozpath.join(config.topobjdir, d)
             manifests_filepath = mozpath.join(self.manifests_root, d)
-            process_manifest(dest_dir, [manifests_filepath], remove_all_directory_symlinks=False)
+            result = process_manifest(dest_dir, [manifests_filepath], remove_all_directory_symlinks=False)
+            print(COMPLETE.format(dest=dest_dir,
+                existing=result.existing_files_count,
+                updated=result.updated_files_count,
+                rm_files=result.removed_files_count,
+                rm_dirs=result.removed_directories_count))
 
+
+        self.loadDependencies()
         if 'LIBXUL_SDK' in config.substs:
             IDL_PARSER_CACHE_DIR = mozpath.join(config.substs['LIBXUL_SDK'], 'sdk/bin')
             self.libxul_sdk = config.substs['LIBXUL_SDK']
@@ -753,12 +764,14 @@ class InternalBackend(CommonBackend):
         IDL_PARSER_DIR = IDL_PARSER_CACHE_DIR
 
         sys.path[0:0] = [IDL_PARSER_DIR, IDL_PARSER_CACHE_DIR]
+
+        for idl_name in sorted(list(self._idl_set)):
+            self.generateXpcomCppHeader(config, idl_name, IDL_PARSER_CACHE_DIR)
+
         for xpt_path, xpt_deps, xpt_dep_file in self._xpt_list:
             target_path = mozpath.join(config.topobjdir, xpt_path)
             self.generateXpcomXpt(config, target_path, xpt_deps, IDL_PARSER_CACHE_DIR)
 
-        for idl_name in sorted(list(self._idl_set)):
-            self.generateXpcomCppHeader(config, idl_name, IDL_PARSER_CACHE_DIR)
         self.dumpDependencies()
 
     def generateXpcomCppHeader(self, config, filename, cache_dir):
@@ -836,9 +849,8 @@ class InternalBuild(InternalBackend):
         pass
 
     def build(self):
+        self.firstBuild()
         pass
-
-
 
 import cPickle
 def loadPickle(picklePath, default=None):

@@ -14,6 +14,7 @@ import mozpack.path as mozpath
 import errno
 from ntfsutils import junction
 from ntfsutils import hardlink
+from ntfsutils import fs
 from collections import (
     Counter,
     OrderedDict,
@@ -34,17 +35,7 @@ def registry_symlink():
     os.symlink = new_symlink
 
     exist_lstat = os.lstat
-    def new_lstat(path):
-        import nt
-        st = exist_lstat(path)
-        if is_symlink(path):
-            new_mode = st.st_mode | stat.S_IFLNK
-            new_mode &= ~stat.S_IFDIR
-            statRedult = [new_mode, st.st_ino, st.st_dev, st.st_nlink, st.st_uid, st.st_gid, st.st_size, st.st_atime, st.st_mtime, st.st_ctime]
-            new_st = nt.stat_result(statRedult)
-            return new_st
-        return st
-    os.lstat = new_lstat
+    os.lstat = fs.lstat
 
     def new_readlink(path):
         if os.path.isdir(path):
