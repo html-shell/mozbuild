@@ -19,7 +19,7 @@ from collections import (
     OrderedDict,
 )
 
-def register_symlink():
+def registry_symlink():
     def new_symlink(source, link_name):
         if os.path.isdir(source):
             return junction.create(source, link_name)
@@ -61,7 +61,7 @@ def register_symlink():
     os.remove = new_remove
     os.unlink = new_remove
 
-register_symlink()
+registry_symlink()
 
 class FileRegistry(object):
     '''
