@@ -24,7 +24,7 @@ from mozbuild.util import (
 
 import mozpack.path as mozpath
 from mozbuild.preprocessor import Preprocessor
-from mozbuild.action import buildlist
+from mozbuild.action.buildlist import addEntriesToListFile
 if sys.platform == 'win32':
     from ctypes import windll, WinError
     CreateHardLink = windll.kernel32.CreateHardLinkA
@@ -57,7 +57,7 @@ def addEntryToListFile(entryPath, chromeSet=None, rootManifestAppId=None):
 
     rootChromeManifest = os.path.join(entryDir, '..', 'chrome.manifest')
     checkChromeFile(chromeSet, rootChromeManifest)
-    buildlist.addEntriesToListFile(rootChromeManifest, [manifestString])
+    addEntriesToListFile(rootChromeManifest, [manifestString])
 
 class ZipEntry(object):
     '''Helper class for jar output.
@@ -194,17 +194,16 @@ class JarMaker(object):
         if not register:
             return
 
-        chromeManifest = os.path.join(os.path.dirname(jarPath), '..',
-                'chrome.manifest')
-
         if self.useJarfileManifest:
             self.updateManifest(jarPath + '.manifest',
                                 chromebasepath.format(''), register)
             addEntryToListFile(jarPath + '.manifest', self.chromeSet)
+
+        chromeManifest = os.path.join(os.path.dirname(jarPath),
+                '..', 'chrome.manifest')
         if self.useChromeManifest:
             self.updateManifest(chromeManifest,
-                                chromebasepath.format('chrome/'),
-                                register)
+                                chromebasepath.format('chrome/'), register)
 
         # If requested, add a root chrome manifest entry (assumed to be in the parent directory
         # of chromeManifest) with the application specific id. In cases where we're building

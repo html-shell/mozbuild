@@ -14,6 +14,7 @@ from xml.dom import getDOMImplementation
 
 from mozpack.files import FileFinder
 from reftest import ReftestManifest
+from mozbuild.action import buildlist
 from mozbuild.action.process_install_manifest import process_manifest
 from mozpack.copier import (
     FilePurger,
@@ -643,6 +644,8 @@ class InternalBackend(CommonBackend):
                     install_target, 'components', 'interfaces.manifest')
                 jar.checkChromeFile(self._chrome_set, interfaces_path)
                 jar.addEntryToListFile(interfaces_path, self._chrome_set)
+                buildlist.addEntriesToListFile(interfaces_path,
+                    ['interfaces {0}'.format(module + '.xpt')])
 
     def _handle_ipdl_sources(self, ipdl_dir,
         sorted_ipdl_sources, unified_ipdl_cppsrcs_mapping
