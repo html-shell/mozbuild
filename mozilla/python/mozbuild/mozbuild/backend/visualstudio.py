@@ -13,6 +13,7 @@ import re
 import types
 import uuid
 
+import xml.etree.ElementTree as ET
 from xml.dom import getDOMImplementation
 
 from mozpack.files import FileFinder
@@ -24,6 +25,7 @@ from ..frontend.data import (
     GeneratedSources,
     HostSources,
     Library,
+    SharedLibrary,
     LocalInclude,
     Sources,
     UnifiedSources,
@@ -86,6 +88,32 @@ class VisualStudioBackend(InternalBackend):
         self.summary.backend_detailed_summary = types.MethodType(detailed,
             self.summary)
 
+    def get_all_linked_libraries(self, obj, all_libs=set()):
+        for x in obj.linked_libraries:
+            if x in all_libs:
+                continue
+            all_libs.add(x)
+            self.get_all_linked_libraries(x, all_libs)
+        return all_libs
+
+    def get_sources_from_libs(self, libs):
+        all_sources = {}
+        for lib in libs:
+            exist_sources = self._paths_to_sources.get(lib.srcdir, set())
+            if len(exist_sources) == 0:
+                exist_sources = self._paths_to_unifies.get(lib.srcdir, set())
+            for source in exist_sources:
+                source_path = mozpath.join(lib.srcdir, source)
+                all_sources[mozpath.normpath(source_path)] = self._paths_to_defines.get(lib.srcdir, {})
+        return all_sources
+
+    def generate_vs_project_for_lib(self, lib):
+        all_libs = self.get_all_linked_libraries(lib)
+        all_sources = self.get_sources_from_libs(all_libs)
+        vs = VsProject(lib.basename, lib.topsrcdir)
+        vs.addFiles(all_sources, 'cpp')
+        vs.generate()
+
     def consume_finished(self):
         InternalBackend.consume_finished(self)
         out_dir = self._out_dir
@@ -95,6 +123,12 @@ class VisualStudioBackend(InternalBackend):
             if e.errno != errno.EEXIST:
                 raise
 
+        for libname,obj in self._top_libs.items():
+            if isinstance(obj, SharedLibrary) and \
+                obj.variant == SharedLibrary.COMPONENT:
+                self.generate_vs_project_for_lib(obj)
+
+        return
         projects = {}
 
         for lib, path in sorted(self._libs_to_paths.items()):
@@ -527,21 +561,35 @@ class VisualStudioBackend(InternalBackend):
 
         return project_id, name
 
+def indent(elem, level=0):
+    i = "\n" + level*"  "
+    if len(elem):
+        if not elem.text or not elem.text.strip():
+            elem.text = i + "  "
+        if not elem.tail or not elem.tail.strip():
+            elem.tail = i
+        for elem in elem:
+            indent(elem, level+1)
+        if not elem.tail or not elem.tail.strip():
+            elem.tail = i
+    else:
+        if level and (not elem.tail or not elem.tail.strip()):
+            elem.tail = i
 
 class VsProject(object):
     def __init__(self, name, srcDir):
         self.name = name
         self.srcDir = srcDir
         self.files = {
-            'cpp':[],
-            'h': [],
-            'text':[],
+            'cpp':{},
+            'h': {},
+            'text':{},
         }
 
     def addFiles(self, files, fileType):
         if not fileType in self.files:
             self.files[fileType] = []
-        self.files[fileType].extend(files)
+        self.files[fileType].update(files)
 
     def findHeaders(self):
         for f in self.files['cpp']:
@@ -557,7 +605,7 @@ class VsProject(object):
     def generateItemGroup(self, itemGroup):
         for fileType, files in self.files.iteritems():
             if fileType == 'cpp':
-                for filePath in files:
+                for filePath in sorted(files.keys()):
                     self.generateCppInclude(itemGroup, filePath)
                 pass
 

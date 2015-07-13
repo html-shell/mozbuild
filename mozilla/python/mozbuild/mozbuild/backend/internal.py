@@ -150,7 +150,7 @@ class InternalBackend(CommonBackend):
             'test_manifests': {},
             'xpt_list': [],
             'libs_link_into': {},
-            'top_libs': set(),
+            'top_libs': {},
             'chrome_files': set(),
             'idl_set': set(),
         }
@@ -308,8 +308,7 @@ class InternalBackend(CommonBackend):
                 self._libs_link_into[obj.basename] = obj.link_into
 
             if obj.library_name and (isinstance(obj, SharedLibrary) or obj.is_sdk):
-                print(obj.library_name)
-                self._top_libs.add(obj.library_name)
+                self._top_libs[obj.library_name] = obj
             self._libs_to_paths[obj.basename] = srcdir
 
         elif isinstance(obj, Defines):
@@ -777,7 +776,8 @@ class InternalBackend(CommonBackend):
         else:
             self.libxul_sdk = mozpath.join(config.topobjdir, 'dist')
             IDL_PARSER_CACHE_DIR = mozpath.join(config.topobjdir, 'dist/sdk/bin')
-        IDL_PARSER_DIR = IDL_PARSER_CACHE_DIR
+        IDL_PARSER_DIR = mozpath.join(config.substs['top_srcdir'], 'xpcom', 'idl-parser')
+        #TODO, generate IDL_PARSER_DIR manually
 
         sys.path[0:0] = [IDL_PARSER_DIR, IDL_PARSER_CACHE_DIR]
 
