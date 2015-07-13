@@ -29,7 +29,7 @@ if sys.platform == 'win32':
     from ctypes import windll, WinError
     CreateHardLink = windll.kernel32.CreateHardLinkA
 
-__all__ = ['JarMaker', 'jm', 'checkChromeFile', 'addEntryToListFile']
+__all__ = ['JarMaker', 'jm', 'checkChromeFile', 'addEntryToListFile', 'ensureDirFor']
 
 def checkChromeFile(chromeSet, manifestPath):
     if chromeSet is None:
@@ -57,7 +57,19 @@ def addEntryToListFile(entryPath, chromeSet=None, rootManifestAppId=None):
 
     rootChromeManifest = os.path.join(entryDir, '..', 'chrome.manifest')
     checkChromeFile(chromeSet, rootChromeManifest)
+    ensureDirFor(rootChromeManifest)
     addEntriesToListFile(rootChromeManifest, [manifestString])
+
+def ensureDirFor(path):
+    out = os.path.join(path)
+    outdir = os.path.dirname(out)
+    if not os.path.isdir(outdir):
+        try:
+            os.makedirs(outdir)
+        except OSError, error:
+            if error.errno != errno.EEXIST:
+                raise
+    return out
 
 class ZipEntry(object):
     '''Helper class for jar output.
@@ -483,15 +495,7 @@ class JarMaker(object):
             return open(out, 'wb')
 
         def ensureDirFor(self, name):
-            out = os.path.join(self.basepath, name)
-            outdir = os.path.dirname(out)
-            if not os.path.isdir(outdir):
-                try:
-                    os.makedirs(outdir)
-                except OSError, error:
-                    if error.errno != errno.EEXIST:
-                        raise
-            return out
+            return ensureDirFor(os.path.join(self.basepath, name))
 
     class OutputHelper_symlink(OutputHelper_flat):
         '''Subclass of OutputHelper_flat that provides a helper for

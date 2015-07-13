@@ -526,3 +526,49 @@ class VisualStudioBackend(InternalBackend):
         doc.writexml(fh, addindent='  ', newl='\r\n')
 
         return project_id, name
+
+
+class VsProject(object):
+    def __init__(self, name, srcDir):
+        self.name = name
+        self.srcDir = srcDir
+        self.files = {
+            'cpp':[],
+            'h': [],
+            'text':[],
+        }
+
+    def addFiles(self, files, fileType):
+        if not fileType in self.files:
+            self.files[fileType] = []
+        self.files[fileType].extend(files)
+
+    def findHeaders(self):
+        for f in self.files['cpp']:
+            d = os.path.dirname(f)
+            for p in os.listdir(d):
+                if p.endswith('.h'):
+                    pass
+            pass
+
+    def generateCppInclude(self, itemGroup, filePath):
+        ET.SubElement(itemGroup, 'ClCompile', {'Include':os.path.relpath(filePath, self.srcDir)})
+
+    def generateItemGroup(self, itemGroup):
+        for fileType, files in self.files.iteritems():
+            if fileType == 'cpp':
+                for filePath in files:
+                    self.generateCppInclude(itemGroup, filePath)
+                pass
+
+            pass
+
+    def generate(self):
+        self.findHeaders()
+        vs = ET.Element('Project')
+        vs.attrib['xmlns'] = "http://schemas.microsoft.com/developer/msbuild/2003"
+        self.generateItemGroup(ET.SubElement(vs, 'ItemGroup'))
+
+        indent(vs)
+        ET.ElementTree(vs).write(os.path.join(self.srcDir, self.name + '.props'), encoding = "utf-8")
+        pass

@@ -63,6 +63,7 @@ from ..frontend.data import (
     GeneratedSources,
     HostSources,
     Library,
+    SharedLibrary,
     LocalInclude,
     Sources,
     UnifiedSources,
@@ -148,6 +149,8 @@ class InternalBackend(CommonBackend):
             'backend_output_files': set(),
             'test_manifests': {},
             'xpt_list': [],
+            'libs_link_into': {},
+            'top_libs': set(),
             'chrome_files': set(),
             'idl_set': set(),
         }
@@ -189,6 +192,9 @@ class InternalBackend(CommonBackend):
 
     def _init_with(self, all_configs):
         self.all_configs = all_configs
+        self.backend_input_files = all_configs['backend_input_files']
+        self._backend_output_files = all_configs['backend_output_files']
+
         self._topdirs_config = all_configs['topdirs']
         self._garbages = all_configs['garbages']
         self._python_unit_tests = all_configs['python_unit_tests']
@@ -199,8 +205,8 @@ class InternalBackend(CommonBackend):
         self._paths_to_includes = all_configs['paths_to_includes']
         self._paths_to_defines = all_configs['paths_to_defines']
         self._libs_to_paths = all_configs['libs_to_paths']
-        self.backend_input_files = all_configs['backend_input_files']
-        self._backend_output_files = all_configs['backend_output_files']
+        self._libs_link_into = all_configs['libs_link_into']
+        self._top_libs = all_configs['top_libs']
         self._test_manifests = all_configs['test_manifests']
         self._chrome_set = all_configs['chrome_files']
         self._xpt_list = all_configs['xpt_list']
@@ -298,6 +304,12 @@ class InternalBackend(CommonBackend):
 
         elif isinstance(obj, Library):
             self._get_config(srcdir)['library_name'] = obj.library_name
+            if hasattr(obj, 'link_into') and obj.link_into:
+                self._libs_link_into[obj.basename] = obj.link_into
+
+            if obj.library_name and (isinstance(obj, SharedLibrary) or obj.is_sdk):
+                print(obj.library_name)
+                self._top_libs.add(obj.library_name)
             self._libs_to_paths[obj.basename] = srcdir
 
         elif isinstance(obj, Defines):
@@ -644,6 +656,7 @@ class InternalBackend(CommonBackend):
                     install_target, 'components', 'interfaces.manifest')
                 jar.checkChromeFile(self._chrome_set, interfaces_path)
                 jar.addEntryToListFile(interfaces_path, self._chrome_set)
+                jar.ensureDirFor(interfaces_path)
                 buildlist.addEntriesToListFile(interfaces_path,
                     ['interfaces {0}'.format(module + '.xpt')])
 
