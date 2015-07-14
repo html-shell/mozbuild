@@ -112,7 +112,8 @@ class VisualStudioBackend(InternalBackend):
             if not disableStlWrapping:
                 includes.append('$(XulrunnerDistDir)\\stl_wrappers')
             if lib.library_name and len(exist_sources) == 0:
-                print(lib.basename)
+                #print(lib.basename)
+                pass
             for source in exist_sources:
                 source_path = mozpath.join(lib.srcdir, source)
                 all_sources[mozpath.normpath(source_path)] = {

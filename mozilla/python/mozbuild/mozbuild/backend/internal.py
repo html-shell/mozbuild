@@ -131,6 +131,15 @@ class InternalBackend(CommonBackend):
     def __init__(self, environment):
         self.depsJson = mozpath.join(environment.topobjdir, 'deps.json')
         self.manifests_root = mozpath.join(environment.topobjdir, '_build_manifests/install')
+
+        config = environment
+        if 'LIBXUL_SDK' in config.substs:
+            self.libxul_sdk = config.substs['LIBXUL_SDK']
+            self.IDL_PARSER_CACHE_DIR = mozpath.join(config.substs['LIBXUL_SDK'], 'sdk/bin')
+        else:
+            self.libxul_sdk = mozpath.join(config.topobjdir, 'dist')
+            self.IDL_PARSER_CACHE_DIR = mozpath.join(config.topobjdir, 'dist/sdk/bin')
+
         BuildBackend.__init__(self, environment)
 
     def _init(self):
@@ -596,6 +605,8 @@ class InternalBackend(CommonBackend):
     def consume_finished(self):
         CommonBackend.consume_finished(self)
         dist_manifest, target = self._get_manifest_from_target('dist')
+        glue_path = mozpath.join(mozpath.normpath(self.libxul_sdk), 'bin/mozglue.dll')
+        dist_manifest.add_symlink(glue_path, mozpath.join(target, 'bin/mozglue.dll'))
 
         dist_manifest.add_optional_exists(mozpath.join(target, 'bin/wpsmail.exe'))
         dist_manifest.add_optional_exists(mozpath.join(target, 'lib/wpsmail.pdb'))
@@ -796,23 +807,18 @@ class InternalBackend(CommonBackend):
 
 
         self.loadDependencies()
-        if 'LIBXUL_SDK' in config.substs:
-            IDL_PARSER_CACHE_DIR = mozpath.join(config.substs['LIBXUL_SDK'], 'sdk/bin')
-            self.libxul_sdk = config.substs['LIBXUL_SDK']
-        else:
-            self.libxul_sdk = mozpath.join(config.topobjdir, 'dist')
-            IDL_PARSER_CACHE_DIR = mozpath.join(config.topobjdir, 'dist/sdk/bin')
+
         IDL_PARSER_DIR = mozpath.join(config.substs['top_srcdir'], 'xpcom', 'idl-parser')
         #TODO, generate IDL_PARSER_DIR manually
 
-        sys.path[0:0] = [IDL_PARSER_DIR, IDL_PARSER_CACHE_DIR]
+        sys.path[0:0] = [IDL_PARSER_DIR, self.IDL_PARSER_CACHE_DIR]
 
         for idl_name in sorted(list(self._idl_set)):
-            self.generateXpcomCppHeader(config, idl_name, IDL_PARSER_CACHE_DIR)
+            self.generateXpcomCppHeader(config, idl_name, self.IDL_PARSER_CACHE_DIR)
 
         for xpt_path, xpt_deps, xpt_dep_file in self._xpt_list:
             target_path = mozpath.join(config.topobjdir, xpt_path)
-            self.generateXpcomXpt(config, target_path, xpt_deps, IDL_PARSER_CACHE_DIR)
+            self.generateXpcomXpt(config, target_path, xpt_deps, self.IDL_PARSER_CACHE_DIR)
 
         self.dumpDependencies()
 

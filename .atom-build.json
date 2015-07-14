@@ -2,12 +2,12 @@
   "cwd": "{PROJECT_PATH}/../Release/",
   "errorMatch": "^(?<file>[^\\.]+.c):(?<line>\\d+):(?<col>\\d+).$",
   "targets": {
-    "Release": {
+    "VisualStudio": {
       "cmd": "{PROJECT_PATH}/../mozilla-build/python/python",
       "sh": false,
-      "args": [ "{PROJECT_PATH}/../../build/BoltBuild.py", "build-backend"]
+      "args": [ "{PROJECT_PATH}/../../build/BoltBuild.py", "prepare"]
     },
-    "Build": {
+    "Normal": {
       "cmd": "{PROJECT_PATH}/../mozilla-build/python/python",
       "sh": false,
       "args": [ "{PROJECT_PATH}/../../build/BoltBuild.py", "build"]
