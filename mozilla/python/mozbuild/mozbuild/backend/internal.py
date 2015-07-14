@@ -595,12 +595,28 @@ class InternalBackend(CommonBackend):
 
     def consume_finished(self):
         CommonBackend.consume_finished(self)
-        bin_manifest, target = self._get_manifest_from_target('dist/bin')
-        bin_manifest.add_optional_exists(mozpath.join(target, 'wpsmail.exe'))
-        bin_manifest.add_optional_exists(mozpath.join(target, 'wpsmail.pdb'))
-        bin_manifest.add_optional_exists(mozpath.join(target, 'bolt.pdb'))
-        bin_manifest.add_optional_exists(mozpath.join(target, 'bolt.dll'))
-        bin_manifest.add_optional_exists(mozpath.join(target, 'bolt.exp'))
+        dist_manifest, target = self._get_manifest_from_target('dist')
+
+        dist_manifest.add_optional_exists(mozpath.join(target, 'bin/wpsmail.exe'))
+        dist_manifest.add_optional_exists(mozpath.join(target, 'lib/wpsmail.pdb'))
+
+        dist_manifest.add_optional_exists(mozpath.join(target, 'bin/helper.exe'))
+        dist_manifest.add_optional_exists(mozpath.join(target, 'lib/helper.pdb'))
+
+        dist_manifest.add_optional_exists(mozpath.join(target, 'bin/mozMapi32.dll'))
+        dist_manifest.add_optional_exists(mozpath.join(target, 'lib/mozMapi32.exp'))
+        dist_manifest.add_optional_exists(mozpath.join(target, 'lib/mozMapi32.pdb'))
+        dist_manifest.add_optional_exists(mozpath.join(target, 'lib/mozMapi32.lib'))
+
+        dist_manifest.add_optional_exists(mozpath.join(target, 'bin/bolt.dll'))
+        dist_manifest.add_optional_exists(mozpath.join(target, 'lib/bolt.exp'))
+        dist_manifest.add_optional_exists(mozpath.join(target, 'lib/bolt.pdb'))
+        dist_manifest.add_optional_exists(mozpath.join(target, 'lib/bolt.lib'))
+
+        dist_manifest.add_optional_exists(mozpath.join(target, 'bin/MapiProxy.dll'))
+        dist_manifest.add_optional_exists(mozpath.join(target, 'lib/MapiProxy.exp'))
+        dist_manifest.add_optional_exists(mozpath.join(target, 'lib/MapiProxy.pdb'))
+        dist_manifest.add_optional_exists(mozpath.join(target, 'lib/MapiProxy.lib'))
 
         print(self.typeSet)
         #print(self.all_configs)
