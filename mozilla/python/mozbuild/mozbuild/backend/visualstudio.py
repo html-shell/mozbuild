@@ -99,12 +99,19 @@ class VisualStudioBackend(InternalBackend):
     def get_sources_from_libs(self, libs):
         all_sources = {}
         for lib in libs:
+            print(lib.basename)
             exist_sources = self._paths_to_sources.get(lib.srcdir, set())
             if len(exist_sources) == 0:
                 exist_sources = self._paths_to_unifies.get(lib.srcdir, set())
+            defines = self._paths_to_defines.get(lib.srcdir, {})
+            includes = self._paths_to_includes.get(lib.srcdir, [])
             for source in exist_sources:
                 source_path = mozpath.join(lib.srcdir, source)
-                all_sources[mozpath.normpath(source_path)] = self._paths_to_defines.get(lib.srcdir, {})
+                all_sources[mozpath.normpath(source_path)] = {
+                    'defines': defines,
+                    'includes': includes,
+                }
+            #DISABLE_STL_WRAPPING
         return all_sources
 
     def generate_vs_project_for_lib(self, lib):
@@ -599,14 +606,21 @@ class VsProject(object):
                     pass
             pass
 
-    def generateCppInclude(self, itemGroup, filePath):
-        ET.SubElement(itemGroup, 'ClCompile', {'Include':os.path.relpath(filePath, self.srcDir)})
+    def generateCppInclude(self, itemGroup, filePath, fileInfo):
+#                            'defines': defines,
+#                            'includes': includes,
+
+        cl = ET.SubElement(itemGroup, 'ClCompile', {'Include':os.path.relpath(filePath, self.srcDir)})
+        includes = list(fileInfo['includes'])
+        if (len(includes) > 0):
+            includes.append('%(AdditionalIncludeDirectories)')
+            ET.SubElement(cl, 'AdditionalIncludeDirectories').text = ';'.join(includes)
 
     def generateItemGroup(self, itemGroup):
         for fileType, files in self.files.iteritems():
             if fileType == 'cpp':
                 for filePath in sorted(files.keys()):
-                    self.generateCppInclude(itemGroup, filePath)
+                    self.generateCppInclude(itemGroup, filePath, files[filePath])
                 pass
 
             pass
