@@ -88,8 +88,22 @@ def get_define(defines, k):
 def get_define_list(defines):
     return [(name, get_define(defines, name)) for name in defines if (get_define(defines, name) is not None)]
 
+def compute_defines_from_dict(new_defines,  define_type = 'dict', prefix='-D'):
+    l = get_define_list(new_defines)
+    if define_type == 'list':
+        return l
+    if define_type == 'DEFINES':
+        return [prefix + '%s%s' % (name, ('' if not value else '='+ str(value))) for (name, value) in l]
+
+    if define_type == 'ACDEFINES':
+        return ' '.join([prefix + '%s=%s' % (name,
+            shell_quote(new_defines[name]).replace('$', '$$')) for name in new_defines if new_defines[name]])
+    if define_type == 'ALLDEFINES':
+        return '\n'.join(sorted(['#define %s %s' % (name,
+            new_defines[name]) for name in new_defines]))
+
 #define_type could be ACDEFINES ALLDEFINES or dict or list
-def compute_defines(config, define_type = 'dict', defines=None):
+def compute_defines(config, define_type = 'dict', defines=None, prefix='-D'):
     new_defines = dict(config.defines)
     for x in config.non_global_defines:
         if x in new_defines:
@@ -98,18 +112,7 @@ def compute_defines(config, define_type = 'dict', defines=None):
         new_defines.update(defines)
     if define_type == 'dict':
         return new_defines
-    l = get_define_list(new_defines)
-    if define_type == 'list':
-        return l
-    if define_type == 'DEFINES':
-        return ['-D%s=%s' % (name, value) for (name, value) in l]
-
-    if define_type == 'ACDEFINES':
-        return ' '.join(['-D%s=%s' % (name,
-            shell_quote(new_defines[name]).replace('$', '$$')) for name in new_defines if new_defines[name]])
-    if define_type == 'ALLDEFINES':
-        return '\n'.join(sorted(['#define %s %s' % (name,
-            new_defines[name]) for name in new_defines]))
+    return compute_defines_from_dict(new_defines, define_type, prefix)
 
 def get_slots(t):
     slots = [];
@@ -343,7 +346,7 @@ class InternalBackend(CommonBackend):
             pass
         elif isinstance(obj, JARManifest):
             exist_defines = self._paths_to_defines.get(srcdir, {})
-            defines = compute_defines(self.environment, 'DEFINES', exist_defines)
+            defines = compute_defines(obj.config, 'DEFINES', exist_defines)
             chromeDir = mozpath.join(obj.topobjdir, obj.target, 'chrome')
 
             localedir = srcdir
@@ -592,6 +595,13 @@ class InternalBackend(CommonBackend):
 
     def consume_finished(self):
         CommonBackend.consume_finished(self)
+        bin_manifest, target = self._get_manifest_from_target('dist/bin')
+        bin_manifest.add_optional_exists(mozpath.join(target, 'wpsmail.exe'))
+        bin_manifest.add_optional_exists(mozpath.join(target, 'wpsmail.pdb'))
+        bin_manifest.add_optional_exists(mozpath.join(target, 'bolt.pdb'))
+        bin_manifest.add_optional_exists(mozpath.join(target, 'bolt.dll'))
+        bin_manifest.add_optional_exists(mozpath.join(target, 'bolt.exp'))
+
         print(self.typeSet)
         #print(self.all_configs)
         #self.print_list(self._garbages)

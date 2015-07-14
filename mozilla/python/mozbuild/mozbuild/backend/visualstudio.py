@@ -20,6 +20,7 @@ from mozpack.files import FileFinder
 
 from .common import CommonBackend
 from .internal import InternalBackend
+from .internal import compute_defines_from_dict
 from ..frontend.data import (
     Defines,
     GeneratedSources,
@@ -99,23 +100,30 @@ class VisualStudioBackend(InternalBackend):
     def get_sources_from_libs(self, libs):
         all_sources = {}
         for lib in libs:
-            print(lib.basename)
             exist_sources = self._paths_to_sources.get(lib.srcdir, set())
             if len(exist_sources) == 0:
                 exist_sources = self._paths_to_unifies.get(lib.srcdir, set())
-            defines = self._paths_to_defines.get(lib.srcdir, {})
+            exist_defines = self._paths_to_defines.get(lib.srcdir, {})
+            config = object()
+            defines = compute_defines_from_dict(exist_defines, 'DEFINES', prefix='')
             includes = self._paths_to_includes.get(lib.srcdir, [])
+            passthru = self._get_config(lib.srcdir).setdefault('passthru', {})
+            disableStlWrapping = passthru.get('DISABLE_STL_WRAPPING', False)
+            if not disableStlWrapping:
+                includes.append('$(XulrunnerDistDir)\\stl_wrappers')
+            if lib.library_name and len(exist_sources) == 0:
+                print(lib.basename)
             for source in exist_sources:
                 source_path = mozpath.join(lib.srcdir, source)
                 all_sources[mozpath.normpath(source_path)] = {
                     'defines': defines,
                     'includes': includes,
                 }
-            #DISABLE_STL_WRAPPING
         return all_sources
 
     def generate_vs_project_for_lib(self, lib):
         all_libs = self.get_all_linked_libraries(lib)
+        all_libs.add(lib)
         all_sources = self.get_sources_from_libs(all_libs)
         vs = VsProject(lib.basename, lib.topsrcdir)
         vs.addFiles(all_sources, 'cpp')
@@ -615,6 +623,10 @@ class VsProject(object):
         if (len(includes) > 0):
             includes.append('%(AdditionalIncludeDirectories)')
             ET.SubElement(cl, 'AdditionalIncludeDirectories').text = ';'.join(includes)
+        defines = list(fileInfo['defines'])
+        if (len(defines) > 0):
+            defines.append('%(PreprocessorDefinitions)')
+            ET.SubElement(cl, 'PreprocessorDefinitions').text = ';'.join(defines)
 
     def generateItemGroup(self, itemGroup):
         for fileType, files in self.files.iteritems():
