@@ -1,13 +1,5 @@
 {
-  "cmd": "{PROJECT_PATH}/../Release/_virtualenv/Scripts/python.exe",
-  "name": "MozBuild",
-  "args": [ "{PROJECT_PATH}/../Release/config.status", "--backend=VisualStudio"],
-  "sh": false,
   "cwd": "{PROJECT_PATH}/../Release/",
-  "env": {
-    "VARIABLE1": "VALUE1",
-    "VARIABLE2": "VALUE2"
-  },
   "errorMatch": "^(?<file>[^\\.]+.c):(?<line>\\d+):(?<col>\\d+).$",
   "targets": {
     "Release": {
@@ -19,6 +11,12 @@
       "cmd": "{PROJECT_PATH}/../mozilla-build/python/python",
       "sh": false,
       "args": [ "{PROJECT_PATH}/../../build/BoltBuild.py", "build"]
+    },
+    "PrepareDist": {
+      "cmd": "{PROJECT_PATH}/../mozilla-build/python/python",
+      "sh": false,
+      "args": [ "{PROJECT_PATH}/../../build/PrepareDist.py", "i686-pc-mingw32"],
+      "cwd": "{PROJECT_PATH}/../../build/"
     }
   }
 }
