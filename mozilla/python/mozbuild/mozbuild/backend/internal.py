@@ -479,7 +479,7 @@ class InternalBackend(CommonBackend):
             return
 
         if obj.flavor == 'extra_pp':
-            self._process_final_target_files(obj, obj.modules, target, True)
+            self._process_final_target_files(obj, obj.modules, target, preprocessor=True)
             return
 
         if obj.flavor == 'testing':
@@ -543,9 +543,9 @@ class InternalBackend(CommonBackend):
             else:
                 install_manifest.add_symlink(source, dest)
 
-    def _process_final_target_files(self, obj, files, target, preprocessor = False, marker='#'):
+    def _process_final_target_files(self, obj, files, target, preprocessor=False, marker='#'):
         for path, strings in files.walk():
-            self._process_files(obj, strings, mozpath.join(target, path), preprocessor = False, marker='#')
+            self._process_files(obj, strings, mozpath.join(target, path), preprocessor=preprocessor, marker=marker)
 
     def _process_test_harness_files(self, obj):
         test_manifest, reltarget = self._get_manifest_from_target('tests')
