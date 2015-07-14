@@ -153,6 +153,7 @@ class InternalBackend(CommonBackend):
 
             'paths_to_unifies': {},
             'paths_to_sources': {},
+            'paths_components_files': {},
             'path_to_unified_sources': set(),
             'paths_to_includes': {},
             'paths_to_defines': {},
@@ -213,6 +214,7 @@ class InternalBackend(CommonBackend):
 
         self._paths_to_unifies = all_configs['paths_to_unifies']
         self._paths_to_sources = all_configs['paths_to_sources']
+        self._paths_components_files = all_configs['paths_components_files']
         self._path_to_unified_sources  = all_configs['path_to_unified_sources']
         self._paths_to_includes = all_configs['paths_to_includes']
         self._paths_to_defines = all_configs['paths_to_defines']
@@ -321,6 +323,9 @@ class InternalBackend(CommonBackend):
 
             if obj.library_name and (isinstance(obj, SharedLibrary) or obj.is_sdk):
                 self._top_libs[obj.library_name] = obj
+            if isinstance(obj, SharedLibrary) and obj.variant == SharedLibrary.COMPONENT:
+                chromeFile = mozpath.join(self.environment.topobjdir, obj.target, 'chrome.manifest')
+                jar.addStringToListFile(chromeFile, 'binary-component %s' % obj.soname, self._chrome_set)
             self._libs_to_paths[obj.basename] = srcdir
 
         elif isinstance(obj, Defines):
@@ -586,6 +591,8 @@ class InternalBackend(CommonBackend):
         for k, v in sorted(obj.variables.items()):
             if k == 'EXTRA_COMPONENTS' or k == 'EXTRA_PP_COMPONENTS':
                 target = mozpath.join(obj.target, 'components')
+                files = self._paths_components_files.setdefault(obj.target, [])
+                files += v
                 self._process_files(obj, v, target, k == 'EXTRA_PP_COMPONENTS')
             elif k == 'PYTHON_UNIT_TESTS':
                 for p in v:
@@ -605,6 +612,14 @@ class InternalBackend(CommonBackend):
     def consume_finished(self):
         CommonBackend.consume_finished(self)
         dist_manifest, target = self._get_manifest_from_target('dist')
+        for dist_dir in self._paths_components_files.keys():
+            chromeFile = mozpath.join(self.environment.topobjdir, dist_dir, 'chrome.manifest')
+            for f in self._paths_components_files[dist_dir]:
+                manifestName = mozpath.basename(f)
+                if not manifestName.endswith('.manifest'):
+                    continue
+                jar.addStringToListFile(chromeFile, 'manifest components/%s' % manifestName, self._chrome_set)
+
         glue_path = mozpath.join(mozpath.normpath(self.libxul_sdk), 'bin/mozglue.dll')
         dist_manifest.add_symlink(glue_path, mozpath.join(target, 'bin/mozglue.dll'))
 
@@ -687,14 +702,10 @@ class InternalBackend(CommonBackend):
 
             dep_file = mozpath.join(self.dep_path, xpt_path + '.pp')
             self._xpt_list.append((xpt_path, deps, dep_file))
-            if len(xpt_modules) > 0:
-                interfaces_path = mozpath.join(self.environment.topobjdir,
-                    install_target, 'components', 'interfaces.manifest')
-                jar.checkChromeFile(self._chrome_set, interfaces_path)
-                jar.addEntryToListFile(interfaces_path, self._chrome_set)
-                jar.ensureDirFor(interfaces_path)
-                buildlist.addEntriesToListFile(interfaces_path,
-                    ['interfaces {0}'.format(module + '.xpt')])
+            interfaces_path = mozpath.join(self.environment.topobjdir,
+                install_target, 'components', 'interfaces.manifest')
+            jar.addEntryToListFile(interfaces_path, self._chrome_set)
+            jar.addStringToListFile(interfaces_path, 'interfaces {0}'.format(module + '.xpt'), self._chrome_set)
 
     def _handle_ipdl_sources(self, ipdl_dir,
         sorted_ipdl_sources, unified_ipdl_cppsrcs_mapping

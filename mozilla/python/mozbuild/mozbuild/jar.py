@@ -29,7 +29,7 @@ if sys.platform == 'win32':
     from ctypes import windll, WinError
     CreateHardLink = windll.kernel32.CreateHardLinkA
 
-__all__ = ['JarMaker', 'jm', 'checkChromeFile', 'addEntryToListFile', 'ensureDirFor']
+__all__ = ['JarMaker', 'jm', 'checkChromeFile', 'addEntryToListFile', 'ensureDirFor', 'addStringToListFile']
 
 def checkChromeFile(chromeSet, manifestPath):
     if chromeSet is None:
@@ -41,6 +41,11 @@ def checkChromeFile(chromeSet, manifestPath):
         os.remove(manifestPath)
     chromeSet.add(manifestNormalPath)
     return True
+
+def addStringToListFile(manifestFile, manifestString, chromeSet):
+    checkChromeFile(chromeSet, manifestFile)
+    ensureDirFor(manifestFile)
+    addEntriesToListFile(manifestFile, [manifestString])
 
 def addEntryToListFile(entryPath, chromeSet=None, rootManifestAppId=None):
     entryDir = os.path.dirname(os.path.normpath(entryPath))
@@ -56,9 +61,7 @@ def addEntryToListFile(entryPath, chromeSet=None, rootManifestAppId=None):
         manifestString = 'manifest {0}/{1}'.format(chromeDir, entryName)
 
     rootChromeManifest = os.path.join(entryDir, '..', 'chrome.manifest')
-    checkChromeFile(chromeSet, rootChromeManifest)
-    ensureDirFor(rootChromeManifest)
-    addEntriesToListFile(rootChromeManifest, [manifestString])
+    addStringToListFile(rootChromeManifest, manifestString, chromeSet)
 
 def ensureDirFor(path):
     out = os.path.join(path)
