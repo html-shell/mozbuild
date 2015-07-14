@@ -619,6 +619,8 @@ class InternalBackend(CommonBackend):
                 if not manifestName.endswith('.manifest'):
                     continue
                 jar.addStringToListFile(chromeFile, 'manifest components/%s' % manifestName, self._chrome_set)
+        chromeFile = mozpath.join(self.environment.topobjdir, 'dist/bin', 'chrome.manifest')
+        jar.addStringToListFile(chromeFile, 'manifest chrome/locales/locales.manifest', self._chrome_set)
 
         glue_path = mozpath.join(mozpath.normpath(self.libxul_sdk), 'bin/mozglue.dll')
         dist_manifest.add_symlink(glue_path, mozpath.join(target, 'bin/mozglue.dll'))
