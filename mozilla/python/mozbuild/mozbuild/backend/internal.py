@@ -632,6 +632,9 @@ class InternalBackend(CommonBackend):
         dist_manifest.add_optional_exists(mozpath.join(target, 'bin/helper.exe'))
         dist_manifest.add_optional_exists(mozpath.join(target, 'lib/helper.pdb'))
 
+        dist_manifest.add_optional_exists(mozpath.join(target, 'bin/WSEnable.exe'))
+        dist_manifest.add_optional_exists(mozpath.join(target, 'lib/WSEnable.pdb'))
+
         dist_manifest.add_optional_exists(mozpath.join(target, 'bin/mozMapi32.dll'))
         dist_manifest.add_optional_exists(mozpath.join(target, 'lib/mozMapi32.exp'))
         dist_manifest.add_optional_exists(mozpath.join(target, 'lib/mozMapi32.pdb'))
