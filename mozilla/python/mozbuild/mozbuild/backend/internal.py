@@ -4,6 +4,7 @@ import errno
 import os
 import sys
 import re
+import time
 import types
 import uuid
 import copy
@@ -131,6 +132,9 @@ class InternalBackend(CommonBackend):
     def __init__(self, environment):
         self.depsJson = mozpath.join(environment.topobjdir, 'deps.json')
         self.manifests_root = mozpath.join(environment.topobjdir, '_build_manifests/install')
+        #TODO: Remove the manifest files
+        self.dep_path = mozpath.join(environment.topobjdir, '_build_manifests', '.deps', 'install')
+        self._compute_xul_flags(environment)
 
         config = environment
         if 'LIBXUL_SDK' in config.substs:
@@ -140,12 +144,7 @@ class InternalBackend(CommonBackend):
             self.libxul_sdk = mozpath.join(config.topobjdir, 'dist')
             self.IDL_PARSER_CACHE_DIR = mozpath.join(config.topobjdir, 'dist/sdk/bin')
 
-        BuildBackend.__init__(self, environment)
-
-    def _init(self):
-        CommonBackend._init(self)
-
-        all_configs = {
+        self.init_all_configs = {
             'topdirs': {},
             'srcdirs': {},
             'garbages': set(),
@@ -167,7 +166,6 @@ class InternalBackend(CommonBackend):
             'chrome_files': set(),
             'idl_set': set(),
         }
-        self._init_with(all_configs)
 
         self._paths_to_configs = {}
 
@@ -193,15 +191,9 @@ class InternalBackend(CommonBackend):
             ]}
         '''
 
-        #TODO: Remove the manifest files
-        self.dep_path = mozpath.join(self.environment.topobjdir, '_build_manifests', '.deps', 'install')
-        self._compute_xul_flags(self.environment)
-
-        def detailed(summary):
-            return 'Building with internal backend finished.'
-        self.summary.backend_detailed_summary = types.MethodType(detailed,
-            self.summary)
         self.typeSet = set()
+
+        BuildBackend.__init__(self, environment)
 
     def _init_with(self, all_configs):
         self.all_configs = all_configs
@@ -663,7 +655,7 @@ class InternalBackend(CommonBackend):
         self._write_manifests('install', self._install_manifests)
         ensureParentDir(mozpath.join(self.environment.topobjdir, 'dist', 'foo'))
         savePickle(self.all_configs_path, self.all_configs)
-        self.firstBuild()
+        self.build()
 
     def _write_manifests(self, dest, manifests):
         man_dir = mozpath.join(self.environment.topobjdir, '_build_manifests',
@@ -741,8 +733,9 @@ class InternalBackend(CommonBackend):
             import cPickle
             saved_setitem = ReadOnlyDict.__setitem__
             ReadOnlyDict.__setitem__ = new_setitem
-            self._init_with(cPickle.load(fh))
+            ret = cPickle.load(fh)
             ReadOnlyDict.__setitem__ = saved_setitem
+            return ret
 
     def addDependencies(self, target, deps):
         if not target in self.newDeps:
@@ -801,7 +794,7 @@ class InternalBackend(CommonBackend):
             return False
         return True
 
-    def firstBuild(self):
+    def build(self):
         print("Start building")
         manifest_list = [
             #'tests',
@@ -837,7 +830,13 @@ class InternalBackend(CommonBackend):
             target_path = mozpath.join(config.topobjdir, xpt_path)
             self.generateXpcomXpt(config, target_path, xpt_deps, self.IDL_PARSER_CACHE_DIR)
 
+        buildFinished = True
+        for backend_file in self.backend_input_files:
+            if self.targetNeedBuild(backend_file):
+                buildFinished = False
+                self.addDependencies(backend_file, [backend_file])
         self.dumpDependencies()
+        return buildFinished
 
     def generateXpcomCppHeader(self, config, filename, cache_dir):
         prefixname = filename[:-4]
@@ -907,15 +906,23 @@ class InternalBackend(CommonBackend):
                 depPath = mozpath.join(self.libxul_sdk,'idl', depFilename)
             outDeps.add(depPath)
 
-class InternalBuild(InternalBackend):
+    def try_build(self):
+        buildFinished = True
+        cpu_start = time.clock()
 
-    def _init(self):
-        self.load_all_configs()
-        pass
+        try:
+            loadedThings = self.load_all_configs()
+            self._init_with(loadedThings)
+            buildFinished = self.build()
+        except:
+            buildFinished = False
 
-    def build(self):
-        self.firstBuild()
-        pass
+        if not buildFinished:
+            self._init_with(self.init_all_configs)
+        else:
+            cpu_time = time.clock() - cpu_start
+            print('Building time is:' + str(cpu_time) + ' seconds')
+        return buildFinished
 
 import cPickle
 def loadPickle(picklePath, default=None):

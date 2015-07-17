@@ -1,22 +1,17 @@
 {
+  "name": "Build",
+  "cmd": "{PROJECT_PATH}/../mozilla-build/python/python",
+  "sh": false,
+  "args": [ "{PROJECT_PATH}/../../build/BoltBuild.py", "build"],
   "cwd": "{PROJECT_PATH}/../Release/",
   "errorMatch": "^(?<file>[^\\.]+.c):(?<line>\\d+):(?<col>\\d+).$",
   "targets": {
-    "VisualStudio": {
-      "cmd": "{PROJECT_PATH}/../mozilla-build/python/python",
-      "sh": false,
-      "args": [ "{PROJECT_PATH}/../../build/BoltBuild.py", "prepare"]
-    },
-    "Normal": {
-      "cmd": "{PROJECT_PATH}/../mozilla-build/python/python",
-      "sh": false,
-      "args": [ "{PROJECT_PATH}/../../build/BoltBuild.py", "build"]
-    },
     "PrepareDist": {
       "cmd": "{PROJECT_PATH}/../mozilla-build/python/python",
       "sh": false,
       "args": [ "{PROJECT_PATH}/../../build/PrepareDist.py", "i686-pc-mingw32"],
-      "cwd": "{PROJECT_PATH}/../../build/"
+      "cwd": "{PROJECT_PATH}/../../build/",
+      "keymap": "ctrl-shift-e"
     }
   }
 }
