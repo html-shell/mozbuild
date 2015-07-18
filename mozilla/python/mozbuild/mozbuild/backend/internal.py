@@ -172,7 +172,8 @@ class InternalBackend(CommonBackend):
         self._install_manifests = {
             k: InstallManifest() for k in [
                 'dist',
-                'tests'
+                'tests',
+                'build',
             ]
         }
         '''
@@ -498,6 +499,7 @@ class InternalBackend(CommonBackend):
         prefix_list = [
             'dist',
             'tests',
+            'build',
         ]
         for prefix in prefix_list:
             if target == prefix or target.startswith(prefix + '/'):
@@ -603,7 +605,7 @@ class InternalBackend(CommonBackend):
 
     def consume_finished(self):
         CommonBackend.consume_finished(self)
-        dist_manifest, target = self._get_manifest_from_target('dist')
+
         for dist_dir in self._paths_components_files.keys():
             chromeFile = mozpath.join(self.environment.topobjdir, dist_dir, 'chrome.manifest')
             for f in self._paths_components_files[dist_dir]:
@@ -615,8 +617,29 @@ class InternalBackend(CommonBackend):
         jar.addStringToListFile(chromeFile, 'manifest chrome/locales/locales.manifest', self._chrome_set)
         jar.addStringToListFile(chromeFile, 'manifest chromeless/chromeless.manifest', self._chrome_set)
 
-        glue_path = mozpath.join(mozpath.normpath(self.libxul_sdk), 'bin/mozglue.dll')
-        dist_manifest.add_symlink(glue_path, mozpath.join(target, 'bin/mozglue.dll'))
+        sdk_path = self.environment.substs['LIBXUL_DIST']
+
+        build_manifest, build_target = self._get_manifest_from_target('build')
+        build_manifest.add_symlink(mozpath.join(sdk_path, 'automation.py'), mozpath.join(build_target, 'automation.py'))
+        build_manifest.add_optional_exists(mozpath.join(build_target, 'configStatus.py'))
+        build_manifest.add_optional_exists(mozpath.join(build_target, 'configStatus.pyc'))
+
+        dist_list = [
+            'bin/mozglue.dll',
+            'sdk/bin/ply/__init__.py',
+            'sdk/bin/ply/lex.py',
+            'sdk/bin/ply/yacc.py',
+            'sdk/bin/header.py',
+            'sdk/bin/typelib.py',
+            'sdk/bin/xpidl.py',
+            'sdk/bin/xpidllex.py',
+            'sdk/bin/xpidlyacc.py',
+            'sdk/bin/xpt.py',
+        ]
+
+        dist_manifest, target = self._get_manifest_from_target('dist')
+        for dist_item in dist_list:
+            dist_manifest.add_symlink(mozpath.join(sdk_path, dist_item), mozpath.join(target, dist_item))
 
         dist_manifest.add_optional_exists(mozpath.join(target, 'bin/wpsmail.exe'))
         dist_manifest.add_optional_exists(mozpath.join(target, 'lib/wpsmail.pdb'))
@@ -797,8 +820,9 @@ class InternalBackend(CommonBackend):
     def build(self):
         print("Start building")
         manifest_list = [
-            #'tests',
-            'dist'
+            'build',
+            'dist',
+            'tests',
         ]
 
         COMPLETE = 'From {dest}: Kept {existing} existing; Added/updated {updated}; ' \
@@ -814,7 +838,6 @@ class InternalBackend(CommonBackend):
                 updated=result.updated_files_count,
                 rm_files=result.removed_files_count,
                 rm_dirs=result.removed_directories_count))
-
 
         self.loadDependencies()
 

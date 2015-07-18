@@ -4,6 +4,7 @@
 
 import os
 import ctypes
+import errno
 import stat
 from ctypes import POINTER, WinError, sizeof, byref
 from ctypes import wintypes
@@ -183,10 +184,15 @@ def junctions_supported(path):
     return bool(fsflags & FILE_SUPPORTS_REPARSE_POINTS)
 
 def win_error(error, filename):
+    if error == 6:
+        ose = OSError()
+        ose.errno = errno.ENOENT
+        ose.filename = filename
+        ose.message = ctypes.FormatError(error)
+        return ose
     exc = WindowsError(error, ctypes.FormatError(error))
     exc.filename = filename
     return exc
-
 
 def attributes_to_mode(data, attributes):
     """Convert Win32 dwFileAttributes to st_mode."""
