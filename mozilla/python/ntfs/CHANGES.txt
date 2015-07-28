@@ -1,0 +1,25 @@
+0.1.3 (2014-04-13)
+==================
+
+- Don't use custom descriptions for WinError.
+  [sid0]
+
+0.1.2 (2013-01-25)
+==================
+
+- Call CloseHandle after GetFileInformationByHandle.
+  [barryp]
+- Add missing LICENSE file to manifest.
+  [pombredanne]
+
+0.1.1 (2012-04-20)
+==================
+
+- Fixed an issue with creating hardlinks.
+  [sid0]
+
+0.1 (2012-04-20)
+================
+
+- Initial release.
+  [rlacko]

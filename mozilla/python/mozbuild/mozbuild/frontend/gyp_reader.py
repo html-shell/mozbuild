@@ -31,9 +31,11 @@ sys.modules['gyp.generator.mozbuild'] = sys.modules[__name__]
 # We're not importing gyp_chromium, but we want both script_dir and
 # chrome_src for the default includes, so go backwards from the pylib
 # directory, which is the parent directory of gyp module.
-chrome_src = mozpath.abspath(mozpath.join(mozpath.dirname(gyp.__file__),
-    '../../../..'))
-script_dir = mozpath.join(chrome_src, 'build')
+def get_chrome_src(config):
+  return mozpath.abspath(mozpath.join(config.topsrcdir, 'media', 'webrtc', 'trunk'))
+
+def get_script_dir(config):
+  return mozpath.join(get_chrome_src(config), 'build')
 
 # Default variables gyp uses when evaluating gyp files.
 generator_default_variables = {
@@ -108,9 +110,9 @@ def read_from_gyp(config, path, output, vars, non_unified_sources = set()):
     }
 
     # Files that gyp_chromium always includes
-    includes = [encode(mozpath.join(script_dir, 'common.gypi'))]
-    finder = FileFinder(chrome_src, find_executables=False)
-    includes.extend(encode(mozpath.join(chrome_src, name))
+    includes = [encode(mozpath.join(get_script_dir(config), 'common.gypi'))]
+    finder = FileFinder(get_chrome_src(config), find_executables=False)
+    includes.extend(encode(mozpath.join(get_chrome_src(config), name))
         for name, _ in finder.find('*/supplement.gypi'))
 
     # Read the given gyp file and its dependencies.

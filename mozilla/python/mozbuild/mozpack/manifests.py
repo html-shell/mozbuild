@@ -136,13 +136,13 @@ class InstallManifest(object):
                 continue
 
             if record_type == self.REQUIRED_EXISTS:
-                _, path = fields
-                self.add_required_exists(path)
+                _, path, deps = fields
+                self.add_required_exists(path, self._decode_field_entry(deps))
                 continue
 
             if record_type == self.OPTIONAL_EXISTS:
-                _, path = fields
-                self.add_optional_exists(path)
+                _, path, deps = fields
+                self.add_optional_exists(path, self._decode_field_entry(deps))
                 continue
 
             if record_type == self.PATTERN_SYMLINK:
@@ -157,7 +157,7 @@ class InstallManifest(object):
 
             if record_type == self.PREPROCESS:
                 dest, source, deps, marker, defines = fields[1:]
-                self.add_preprocess(source, dest, deps, marker,
+                self.add_preprocess(self._decode_field_entry(source), dest, deps, marker,
                     self._decode_field_entry(defines))
                 continue
 
@@ -233,7 +233,8 @@ class InstallManifest(object):
 
         dest will be a symlink to source.
         """
-        self._add_entry(dest, (self.SYMLINK, source))
+        #self._add_entry(dest, (self.SYMLINK, source))
+        self._add_entry(dest, (self.COPY, source))
 
     def add_copy(self, source, dest):
         """Add a copy to this manifest.
@@ -242,21 +243,21 @@ class InstallManifest(object):
         """
         self._add_entry(dest, (self.COPY, source))
 
-    def add_required_exists(self, dest):
+    def add_required_exists(self, dest, deps = []):
         """Record that a destination file must exist.
 
         This effectively prevents the listed file from being deleted.
         """
-        self._add_entry(dest, (self.REQUIRED_EXISTS,))
+        self._add_entry(dest, (self.REQUIRED_EXISTS, self._encode_field_entry(deps)))
 
-    def add_optional_exists(self, dest):
+    def add_optional_exists(self, dest, deps = []):
         """Record that a destination file may exist.
 
         This effectively prevents the listed file from being deleted. Unlike a
         "required exists" file, files of this type do not raise errors if the
         destination file does not exist.
         """
-        self._add_entry(dest, (self.OPTIONAL_EXISTS,))
+        self._add_entry(dest, (self.OPTIONAL_EXISTS, self._encode_field_entry(deps)))
 
     def add_pattern_symlink(self, base, pattern, dest):
         """Add a pattern match that results in symlinks being created.
@@ -270,16 +271,19 @@ class InstallManifest(object):
 
            <base>/foo/bar.h -> <dest>/foo/bar.h
         """
-        self._add_entry(mozpath.join(base, pattern, dest),
-            (self.PATTERN_SYMLINK, base, pattern, dest))
+        self._add_pattern(base, pattern, dest, self.PATTERN_SYMLINK)
 
     def add_pattern_copy(self, base, pattern, dest):
         """Add a pattern match that results in copies.
 
         See ``add_pattern_symlink()`` for usage.
         """
-        self._add_entry(mozpath.join(base, pattern, dest),
-            (self.PATTERN_COPY, base, pattern, dest))
+        self._add_pattern(base, pattern, dest, self.PATTERN_COPY)
+
+    def _add_pattern(self, base, pattern, dest, pattern_type):
+        dest = mozpath.normpath(dest)
+        self._add_entry('%s|%s|%s' % (dest, base, pattern),
+            (pattern_type, base, pattern, dest), normlize_dest=False)
 
     def add_preprocess(self, source, dest, deps, marker='#', defines={}):
         """Add a preprocessed file to this manifest.
@@ -288,9 +292,11 @@ class InstallManifest(object):
         written to ``dest``.
         """
         self._add_entry(dest,
-            (self.PREPROCESS, source, deps, marker, self._encode_field_entry(defines)))
+            (self.PREPROCESS, self._encode_field_entry(source), deps, marker, self._encode_field_entry(defines)))
 
-    def _add_entry(self, dest, entry):
+    def _add_entry(self, dest, entry, normlize_dest = True):
+        if normlize_dest:
+          dest = mozpath.normpath(dest)
         if dest in self._dests:
             raise ValueError('Item already in manifest: %s' % dest)
 
@@ -315,12 +321,8 @@ class InstallManifest(object):
                 registry.add(dest, File(entry[1]))
                 continue
 
-            if install_type == self.REQUIRED_EXISTS:
-                registry.add(dest, ExistingFile(required=True))
-                continue
-
-            if install_type == self.OPTIONAL_EXISTS:
-                registry.add(dest, ExistingFile(required=False))
+            if install_type in (self.REQUIRED_EXISTS, self.OPTIONAL_EXISTS):
+                registry.add(dest, ExistingFile(install_type==self.REQUIRED_EXISTS, self._decode_field_entry(entry[1])))
                 continue
 
             if install_type in (self.PATTERN_SYMLINK, self.PATTERN_COPY):
@@ -340,7 +342,7 @@ class InstallManifest(object):
                 continue
 
             if install_type == self.PREPROCESS:
-                registry.add(dest, PreprocessedFile(entry[1],
+                registry.add(dest, PreprocessedFile(self._decode_field_entry(entry[1]),
                     depfile_path=entry[2],
                     marker=entry[3],
                     defines=self._decode_field_entry(entry[4]),

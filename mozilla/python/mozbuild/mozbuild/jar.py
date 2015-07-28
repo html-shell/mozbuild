@@ -22,14 +22,57 @@ from mozbuild.util import (
     PushbackIter,
 )
 
+import mozpack.path as mozpath
 from mozbuild.preprocessor import Preprocessor
 from mozbuild.action.buildlist import addEntriesToListFile
 if sys.platform == 'win32':
     from ctypes import windll, WinError
     CreateHardLink = windll.kernel32.CreateHardLinkA
 
-__all__ = ['JarMaker']
+__all__ = ['JarMaker', 'jm', 'checkChromeFile', 'addEntryToListFile', 'ensureDirFor', 'addStringToListFile']
 
+def checkChromeFile(chromeSet, manifestPath):
+    if chromeSet is None:
+        return None
+    manifestNormalPath = mozpath.normpath(manifestPath)
+    if manifestNormalPath in chromeSet:
+        return False
+    if os.path.exists(manifestPath):
+        os.remove(manifestPath)
+    chromeSet.add(manifestNormalPath)
+    return True
+
+def addStringToListFile(manifestFile, manifestString, chromeSet):
+    checkChromeFile(chromeSet, manifestFile)
+    ensureDirFor(manifestFile)
+    addEntriesToListFile(manifestFile, [manifestString])
+
+def addEntryToListFile(entryPath, chromeSet=None, rootManifestAppId=None):
+    entryDir = os.path.dirname(os.path.normpath(entryPath))
+    entryName = os.path.basename(entryPath)
+    chromeDir = os.path.basename(entryDir)
+
+    if rootManifestAppId:
+        logging.info("adding '%s' entry to root chrome manifest appid=%s"
+                      % (chromeDir, rootManifestAppId))
+        manifestString = 'manifest {0}/{1}.manifest application={2}'.format(
+            chromeDir, entryName, rootManifestAppId)
+    else:
+        manifestString = 'manifest {0}/{1}'.format(chromeDir, entryName)
+
+    rootChromeManifest = os.path.join(entryDir, '..', 'chrome.manifest')
+    addStringToListFile(rootChromeManifest, manifestString, chromeSet)
+
+def ensureDirFor(path):
+    out = os.path.join(path)
+    outdir = os.path.dirname(out)
+    if not os.path.isdir(outdir):
+        try:
+            os.makedirs(outdir)
+        except OSError, error:
+            if error.errno != errno.EEXIST:
+                raise
+    return out
 
 class ZipEntry(object):
     '''Helper class for jar output.
@@ -91,6 +134,9 @@ class JarMaker(object):
         self.l10nmerge = None
         self.relativesrcdir = None
         self.rootManifestAppId = None
+        self.processList = []
+        self.installList = []
+        self.chromeSet = None
 
     def getCommandLineParser(self):
         '''Get a optparse.OptionParser for jarmaker.
@@ -133,6 +179,8 @@ class JarMaker(object):
         p.add_option('--root-manifest-entry-appid', type='string',
                      help='add an app id specific root chrome manifest entry.'
                      )
+        p.add_option('--output-list', action='store_true', dest="outputList", default=False,
+                     help='Check if output the files list need to be processed and copied')
         return p
 
     def processIncludes(self, includes):
@@ -161,42 +209,30 @@ class JarMaker(object):
         if not register:
             return
 
-        chromeManifest = os.path.join(os.path.dirname(jarPath), '..',
-                'chrome.manifest')
-
         if self.useJarfileManifest:
             self.updateManifest(jarPath + '.manifest',
                                 chromebasepath.format(''), register)
-            addEntriesToListFile(chromeManifest,
-                                 ['manifest chrome/{0}.manifest'.format(os.path.basename(jarPath))])
+            addEntryToListFile(jarPath + '.manifest', self.chromeSet)
+
+        chromeManifest = os.path.join(os.path.dirname(jarPath),
+                '..', 'chrome.manifest')
         if self.useChromeManifest:
             self.updateManifest(chromeManifest,
-                                chromebasepath.format('chrome/'),
-                                register)
+                                chromebasepath.format('chrome/'), register)
 
         # If requested, add a root chrome manifest entry (assumed to be in the parent directory
         # of chromeManifest) with the application specific id. In cases where we're building
         # lang packs, the root manifest must know about application sub directories.
 
         if self.rootManifestAppId:
-            rootChromeManifest = \
-                os.path.join(os.path.normpath(os.path.dirname(chromeManifest)),
-                             '..', 'chrome.manifest')
-            rootChromeManifest = os.path.normpath(rootChromeManifest)
-            chromeDir = \
-                os.path.basename(os.path.dirname(os.path.normpath(chromeManifest)))
-            logging.info("adding '%s' entry to root chrome manifest appid=%s"
-                          % (chromeDir, self.rootManifestAppId))
-            addEntriesToListFile(rootChromeManifest,
-                                 ['manifest %s/chrome.manifest application=%s'
-                                  % (chromeDir,
-                                 self.rootManifestAppId)])
+            addEntryToListFile(chromeManifest, self.chromeSet, rootManifestAppId=self.rootManifestAppId)
 
     def updateManifest(self, manifestPath, chromebasepath, register):
         '''updateManifest replaces the % in the chrome registration entries
         with the given chrome base path, and updates the given manifest file.
         '''
 
+        checkChromeFile(self.chromeSet, manifestPath)
         lock = lock_file(manifestPath + '.lck')
         try:
             myregister = dict.fromkeys(map(lambda s: s.replace('%',
@@ -235,7 +271,7 @@ class JarMaker(object):
             self.localedirs = \
                 self.generateLocaleDirs(self.relativesrcdir)
         if isinstance(infile, basestring):
-            logging.info('processing ' + infile)
+            if not self.options.outputList: logging.info('processing ' + infile)
             self.sourcedirs.append(_normpath(os.path.dirname(infile)))
         pp = self.pp.clone()
         pp.out = StringIO()
@@ -384,6 +420,15 @@ class JarMaker(object):
                 jf.close()
             raise RuntimeError('File "{0}" not found in {1}'.format(src,
                                ', '.join(src_base)))
+        if self.options.outputList:
+            realout = outHelper.ensureDirFor(out)
+            realsrc = mozpath.normpath(realsrc)
+            realout = mozpath.normpath(realout)
+            if m.group('optPreprocess'):
+                self.processList.append((realsrc, realout))
+            else:
+                self.installList.append((realsrc, realout))
+            return
         if m.group('optPreprocess'):
             outf = outHelper.getOutput(out)
             inf = open(realsrc)
@@ -400,7 +445,7 @@ class JarMaker(object):
         # copy or symlink if newer or overwrite
 
         if m.group('optOverwrite') or getModTime(realsrc) \
-            > outHelper.getDestModTime(m.group('output')):
+            > outHelper.getDestModTime(out):
             if self.outputFormat == 'symlink':
                 outHelper.symlink(realsrc, out)
                 return
@@ -453,15 +498,7 @@ class JarMaker(object):
             return open(out, 'wb')
 
         def ensureDirFor(self, name):
-            out = os.path.join(self.basepath, name)
-            outdir = os.path.dirname(out)
-            if not os.path.isdir(outdir):
-                try:
-                    os.makedirs(outdir)
-                except OSError, error:
-                    if error.errno != errno.EEXIST:
-                        raise
-            return out
+            return ensureDirFor(os.path.join(self.basepath, name))
 
     class OutputHelper_symlink(OutputHelper_flat):
         '''Subclass of OutputHelper_flat that provides a helper for
@@ -485,12 +522,16 @@ class JarMaker(object):
                 if rv == 0:
                     raise WinError()
 
+jm = None
 
-def main(args=None):
+def main(args=None, chromeSet = None):
+    global jm
     args = args or sys.argv
     jm = JarMaker()
+    jm.chromeSet = chromeSet
     p = jm.getCommandLineParser()
     (options, args) = p.parse_args(args)
+    jm.options = options
     jm.processIncludes(options.I)
     jm.outputFormat = options.f
     jm.sourcedirs = options.s

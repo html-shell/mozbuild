@@ -13,21 +13,25 @@ import re
 import types
 import uuid
 
+import xml.etree.ElementTree as ET
 from xml.dom import getDOMImplementation
 
 from mozpack.files import FileFinder
 
 from .common import CommonBackend
+from .internal import InternalBackend
+from .internal import compute_defines_from_dict
 from ..frontend.data import (
     Defines,
     GeneratedSources,
     HostSources,
     Library,
+    SharedLibrary,
     LocalInclude,
     Sources,
     UnifiedSources,
 )
-
+import mozpack.path as mozpath
 
 MSBUILD_NAMESPACE = 'http://schemas.microsoft.com/developer/msbuild/2003'
 
@@ -55,7 +59,7 @@ def visual_studio_product_to_internal_version(version, solution=False):
         else:
             raise Exception('Unknown version seen: %s' % version)
 
-class VisualStudioBackend(CommonBackend):
+class VisualStudioBackend(InternalBackend):
     """Generate Visual Studio project files.
 
     This backend is used to produce Visual Studio projects and a solution
@@ -71,18 +75,12 @@ class VisualStudioBackend(CommonBackend):
     """
 
     def _init(self):
-        CommonBackend._init(self)
+        InternalBackend._init(self)
 
         # These should eventually evolve into parameters.
         self._out_dir = os.path.join(self.environment.topobjdir, 'msvc')
         # But making this one a parameter requires testing first.
         self._version = '2010'
-
-        self._paths_to_sources = {}
-        self._paths_to_includes = {}
-        self._paths_to_defines = {}
-        self._paths_to_configs = {}
-        self._libs_to_paths = {}
 
         def detailed(summary):
             return 'Generated Visual Studio solution at %s' % (
@@ -91,58 +89,49 @@ class VisualStudioBackend(CommonBackend):
         self.summary.backend_detailed_summary = types.MethodType(detailed,
             self.summary)
 
-    def consume_object(self, obj):
-        # Just acknowledge everything.
-        obj.ack()
+    def get_all_linked_libraries(self, obj, all_libs=set()):
+        for x in obj.linked_libraries:
+            if x in all_libs:
+                continue
+            all_libs.add(x)
+            self.get_all_linked_libraries(x, all_libs)
+        return all_libs
 
-        reldir = getattr(obj, 'relativedir', None)
+    def get_sources_from_libs(self, libs):
+        all_sources = {}
+        for lib in libs:
+            exist_sources = self._paths_to_sources.get(lib.srcdir, set())
+            if len(exist_sources) == 0:
+                exist_sources = self._paths_to_unifies.get(lib.srcdir, set())
+            exist_defines = self._paths_to_defines.get(lib.srcdir, {})
+            config = object()
+            defines = compute_defines_from_dict(exist_defines, 'DEFINES', prefix='')
+            includes = self._paths_to_includes.get(lib.srcdir, [])
+            passthru = self._get_config(lib.srcdir).setdefault('passthru', {})
+            disableStlWrapping = passthru.get('DISABLE_STL_WRAPPING', False)
+            if not disableStlWrapping:
+                includes.append('$(XulrunnerDistDir)\\stl_wrappers')
+            if lib.library_name and len(exist_sources) == 0:
+                #print(lib.basename)
+                pass
+            for source in exist_sources:
+                source_path = mozpath.join(lib.srcdir, source)
+                all_sources[mozpath.normpath(source_path)] = {
+                    'defines': defines,
+                    'includes': includes,
+                }
+        return all_sources
 
-        if hasattr(obj, 'config') and reldir not in self._paths_to_configs:
-            self._paths_to_configs[reldir] = obj.config
-
-        if isinstance(obj, Sources):
-            self._add_sources(reldir, obj)
-
-        elif isinstance(obj, HostSources):
-            self._add_sources(reldir, obj)
-
-        elif isinstance(obj, GeneratedSources):
-            self._add_sources(reldir, obj)
-
-        elif isinstance(obj, UnifiedSources):
-            # XXX we should be letting CommonBackend.consume_object call this
-            # for us instead.
-            self._process_unified_sources(obj);
-
-        elif isinstance(obj, Library):
-            self._libs_to_paths[obj.basename] = reldir
-
-        elif isinstance(obj, Defines):
-            self._paths_to_defines.setdefault(reldir, {}).update(obj.defines)
-
-        elif isinstance(obj, LocalInclude):
-            p = obj.path
-            includes = self._paths_to_includes.setdefault(reldir, [])
-
-            if p.startswith('/'):
-                includes.append(os.path.join('$(TopSrcDir)', p[1:]))
-            else:
-                includes.append(os.path.join('$(TopSrcDir)', reldir, p))
-
-    def _add_sources(self, reldir, obj):
-        s = self._paths_to_sources.setdefault(reldir, set())
-        s.update(obj.files)
-
-    def _process_unified_sources(self, obj):
-        reldir = getattr(obj, 'relativedir', None)
-
-        s = self._paths_to_sources.setdefault(reldir, set())
-        if obj.have_unified_mapping:
-            s.update(unified_file for unified_file, _ in obj.unified_source_mapping)
-        else:
-            s.update(obj.files)
+    def generate_vs_project_for_lib(self, lib):
+        all_libs = self.get_all_linked_libraries(lib)
+        all_libs.add(lib)
+        all_sources = self.get_sources_from_libs(all_libs)
+        vs = VsProject(lib.basename, lib.topsrcdir)
+        vs.addFiles(all_sources, 'cpp')
+        vs.generate()
 
     def consume_finished(self):
+        InternalBackend.consume_finished(self)
         out_dir = self._out_dir
         try:
             os.makedirs(out_dir)
@@ -150,13 +139,21 @@ class VisualStudioBackend(CommonBackend):
             if e.errno != errno.EEXIST:
                 raise
 
+        for libname,obj in self._top_libs.items():
+            if isinstance(obj, SharedLibrary) and \
+                obj.variant == SharedLibrary.COMPONENT:
+                self.generate_vs_project_for_lib(obj)
+
+        return
         projects = {}
 
         for lib, path in sorted(self._libs_to_paths.items()):
             config = self._paths_to_configs.get(path, None)
-            sources = self._paths_to_sources.get(path, set())
-            sources = set(os.path.join('$(TopSrcDir)', path, s) for s in sources)
-            sources = set(os.path.normpath(s) for s in sources)
+            exist_sources = self._paths_to_sources.get(path, set())
+            sources = set();
+            for s in exist_sources:
+                prefx_path = '$(TopObjDir)' if s in self._path_to_unified_sources else '$(TopSrcDir)'
+                sources.add(os.path.normpath(os.path.join(prefx_path, path, s)))
 
             finder = FileFinder(os.path.join(self.environment.topsrcdir, path),
                 find_executables=False)
@@ -190,7 +187,10 @@ class VisualStudioBackend(CommonBackend):
             includes = [os.path.normpath(i) for i in includes]
 
             defines = []
-            for k, v in self._paths_to_defines.get(path, {}).items():
+            all_defines = {}
+            all_defines.update(self._paths_to_defines.get(path, {}))
+            defines.extend(self.environment.defines) # Append global defines
+            for k, v in all_defines.items():
                 if v is True:
                     defines.append(k)
                 else:
@@ -537,6 +537,8 @@ class VisualStudioBackend(CommonBackend):
         if includes:
             n = pg.appendChild(doc.createElement('NMakeIncludeSearchPath'))
             n.appendChild(doc.createTextNode(';'.join(includes)))
+            n = pg.appendChild(doc.createElement('IncludePath'))
+            n.appendChild(doc.createTextNode(';'.join(includes)))
 
         if forced_includes:
             n = pg.appendChild(doc.createElement('NMakeForcedIncludes'))
@@ -574,3 +576,74 @@ class VisualStudioBackend(CommonBackend):
         doc.writexml(fh, addindent='  ', newl='\r\n')
 
         return project_id, name
+
+def indent(elem, level=0):
+    i = "\n" + level*"  "
+    if len(elem):
+        if not elem.text or not elem.text.strip():
+            elem.text = i + "  "
+        if not elem.tail or not elem.tail.strip():
+            elem.tail = i
+        for elem in elem:
+            indent(elem, level+1)
+        if not elem.tail or not elem.tail.strip():
+            elem.tail = i
+    else:
+        if level and (not elem.tail or not elem.tail.strip()):
+            elem.tail = i
+
+class VsProject(object):
+    def __init__(self, name, srcDir):
+        self.name = name
+        self.srcDir = srcDir
+        self.files = {
+            'cpp':{},
+            'h': {},
+            'text':{},
+        }
+
+    def addFiles(self, files, fileType):
+        if not fileType in self.files:
+            self.files[fileType] = []
+        self.files[fileType].update(files)
+
+    def findHeaders(self):
+        for f in self.files['cpp']:
+            d = os.path.dirname(f)
+            for p in os.listdir(d):
+                if p.endswith('.h'):
+                    pass
+            pass
+
+    def generateCppInclude(self, itemGroup, filePath, fileInfo):
+#                            'defines': defines,
+#                            'includes': includes,
+
+        cl = ET.SubElement(itemGroup, 'ClCompile', {'Include':os.path.relpath(filePath, self.srcDir)})
+        includes = list(fileInfo['includes'])
+        if (len(includes) > 0):
+            includes.append('%(AdditionalIncludeDirectories)')
+            ET.SubElement(cl, 'AdditionalIncludeDirectories').text = ';'.join(includes)
+        defines = list(fileInfo['defines'])
+        if (len(defines) > 0):
+            defines.append('%(PreprocessorDefinitions)')
+            ET.SubElement(cl, 'PreprocessorDefinitions').text = ';'.join(defines)
+
+    def generateItemGroup(self, itemGroup):
+        for fileType, files in self.files.iteritems():
+            if fileType == 'cpp':
+                for filePath in sorted(files.keys()):
+                    self.generateCppInclude(itemGroup, filePath, files[filePath])
+                pass
+
+            pass
+
+    def generate(self):
+        self.findHeaders()
+        vs = ET.Element('Project')
+        vs.attrib['xmlns'] = "http://schemas.microsoft.com/developer/msbuild/2003"
+        self.generateItemGroup(ET.SubElement(vs, 'ItemGroup'))
+
+        indent(vs)
+        ET.ElementTree(vs).write(os.path.join(self.srcDir, self.name + '.props'), encoding = "utf-8")
+        pass

@@ -12,11 +12,47 @@ from mozpack.files import (
 )
 import mozpack.path as mozpath
 import errno
+from ntfsutils import junction
+from ntfsutils import hardlink
+from ntfsutils import fs
 from collections import (
     Counter,
     OrderedDict,
 )
 
+def registry_symlink():
+    def new_symlink(source, link_name):
+        if os.path.isdir(source):
+            return junction.create(source, link_name)
+        return hardlink.create(source, link_name)
+
+    def is_symlink(source):
+        if os.path.isdir(source):
+            ret = junction.isjunction(source)
+            return ret
+        return hardlink.is_hardlink(source)
+
+    os.symlink = new_symlink
+
+    exist_lstat = os.lstat
+    os.lstat = fs.lstat
+
+    def new_readlink(path):
+        if os.path.isdir(path):
+            return junction.readlink(path)
+        return hardlink.readlink(path)
+    os.readlink = new_readlink
+
+    exist_remove = os.remove
+    def new_remove(path):
+        if os.path.isdir(path) and is_symlink(path):
+            junction.unlink(path)
+        else:
+            exist_remove(path)
+    os.remove = new_remove
+    os.unlink = new_remove
+
+registry_symlink()
 
 class FileRegistry(object):
     '''
@@ -325,6 +361,9 @@ class FileCopier(FileRegistry):
 
         # Remove files no longer accounted for.
         if remove_unaccounted:
+            for f in dest_files - existing_files:
+                #print('Target file ' + f + ' not generated.')
+                pass
             for f in existing_files - dest_files:
                 # Windows requires write access to remove files.
                 if os.name == 'nt' and not os.access(f, os.W_OK):

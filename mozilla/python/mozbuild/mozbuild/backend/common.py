@@ -59,6 +59,7 @@ class XPIDLManager(object):
             'module': module,
             'basename': basename,
             'root': root,
+            'install_target': install_target,
         }
 
         if not allow_existing and entry['basename'] in self.idls:
@@ -191,7 +192,7 @@ class CommonBackend(BuildBackend):
 
         elif isinstance(obj, XPIDLFile):
             self._idl_manager.register_idl(obj.source_path, obj.module,
-                obj.install_target)
+                obj.target)
 
         elif isinstance(obj, ConfigFileSubstitution):
             # Do not handle ConfigFileSubstitution for Makefiles. Leave that

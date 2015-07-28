@@ -20,6 +20,7 @@ mozilla.pth:dom/bindings/parser
 mozilla.pth:layout/tools/reftest
 moztreedocs.pth:tools/docs
 copy:build/buildconfig.py
+ntfs.pth:python/ntfs
 packages.txt:testing/mozbase/packages.txt
 objdir:build
 gyp.pth:media/webrtc/trunk/tools/gyp/pylib

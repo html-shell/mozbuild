@@ -40,7 +40,7 @@ class VirtualenvManager(object):
     """Contains logic for managing virtualenvs for building the tree."""
 
     def __init__(self, topsrcdir, topobjdir, virtualenv_path, log_handle,
-        manifest_path):
+        manifest_path, ctx=None):
         """Create a new manager.
 
         Each manager is associated with a source directory, a path where you
@@ -52,6 +52,10 @@ class VirtualenvManager(object):
         self.virtualenv_root = virtualenv_path
         self.log_handle = log_handle
         self.manifest_path = manifest_path
+        if ctx:
+            ctx.topsrcdir = topsrcdir
+            ctx.pathToCopy.add(os.path.relpath(os.path.abspath(self.manifest_path), start=ctx.topsrcdir))
+        self.ctx = ctx
 
     @property
     def virtualenv_script_path(self):
@@ -108,7 +112,7 @@ class VirtualenvManager(object):
                                            self.topobjdir,
                                            self.virtualenv_root,
                                            self.log_handle,
-                                           submanifest)
+                                           submanifest, self.ctx)
             if not submanager.up_to_date():
                 return False
 
@@ -197,6 +201,9 @@ class VirtualenvManager(object):
 
         def handle_package(package):
             python_lib = distutils.sysconfig.get_python_lib()
+            if self.ctx and package[0] != 'optional':
+                self.ctx.pathToCopy.add(package[1])
+                return True
             if package[0] == 'setup.py':
                 assert len(package) >= 2
 
@@ -224,7 +231,7 @@ class VirtualenvManager(object):
                                                self.topobjdir,
                                                self.virtualenv_root,
                                                self.log_handle,
-                                               src)
+                                               src, self.ctx)
                 submanager.populate()
 
                 return True

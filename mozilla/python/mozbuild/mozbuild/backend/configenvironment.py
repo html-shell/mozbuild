@@ -106,6 +106,7 @@ class ConfigEnvironment(object):
             source = mozpath.join(topobjdir, 'config.status')
         self.source = source
         self.defines = ReadOnlyDict(defines)
+        self.non_global_defines = frozenset(non_global_defines)
         self.substs = dict(substs)
         self.topsrcdir = mozpath.abspath(topsrcdir)
         self.topobjdir = mozpath.abspath(topobjdir)
@@ -179,3 +180,17 @@ class ConfigEnvironment(object):
 
         return ConfigEnvironment(config.topsrcdir, config.topobjdir,
             config.defines, config.non_global_defines, config.substs, path)
+
+    exclude_keys = ['ACDEFINES', 'ALLSUBSTS', 'ALLEMPTYSUBSTS', 'ALLDEFINES']
+
+    def to_dict(self):
+        ret = {}
+        for k in self.__dict__:
+            if isinstance(self.__dict__[k], dict):
+                ret[k] = dict(self.__dict__[k])
+            else:
+                ret[k] = self.__dict__[k]
+        for k in self.exclude_keys:
+            ret['substs'].pop(k, None)
+        ret.pop('substs_unicode', None)
+        return ret

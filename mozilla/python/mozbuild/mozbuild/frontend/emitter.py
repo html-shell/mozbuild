@@ -657,7 +657,7 @@ class TreeMetadataEmitter(LoggingMixin):
 
         final_target_files = context.get('FINAL_TARGET_FILES')
         if final_target_files:
-            yield FinalTargetFiles(context, final_target_files, context['FINAL_TARGET'])
+            yield FinalTargetFiles(context, final_target_files)
 
         host_libname = context.get('HOST_LIBRARY_NAME')
         libname = context.get('LIBRARY_NAME')

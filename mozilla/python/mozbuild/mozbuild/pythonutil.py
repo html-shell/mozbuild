@@ -4,10 +4,10 @@
 
 import os
 import sys
-
+import mozpack.path as mozpath
 
 def iter_modules_in_path(*paths):
-    paths = [os.path.abspath(os.path.normcase(p)) + os.sep
+    normal_paths = [os.path.abspath(os.path.normcase(p)) + os.sep
              for p in paths]
     for name, module in sys.modules.items():
         if not hasattr(module, '__file__'):
@@ -17,7 +17,7 @@ def iter_modules_in_path(*paths):
 
         if path.endswith('.pyc'):
             path = path[:-1]
-        path = os.path.abspath(os.path.normcase(path))
+        normal_path = os.path.abspath(os.path.normcase(path))
 
-        if any(path.startswith(p) for p in paths):
-            yield path
+        if any(normal_path.startswith(p) for p in normal_paths):
+            yield mozpath.abspath(path)

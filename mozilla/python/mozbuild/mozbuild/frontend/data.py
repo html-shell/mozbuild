@@ -64,10 +64,11 @@ class ContextDerived(TreeMetadata):
         'objdir',
         'relativedir',
         'context_all_paths',
-        'context_path',
+        'context_main_path',
         'srcdir',
         'topobjdir',
         'topsrcdir',
+        'target',
     )
 
     def __init__(self, context):
@@ -86,6 +87,7 @@ class ContextDerived(TreeMetadata):
         self.objdir = context.objdir
 
         self.config = context.config
+        self.target = context['FINAL_TARGET']
 
     @property
     def relobjdir(self):
@@ -161,7 +163,6 @@ class XPIDLFile(ContextDerived):
 
     __slots__ = (
         'basename',
-        'install_target',
         'source_path',
     )
 
@@ -171,8 +172,6 @@ class XPIDLFile(ContextDerived):
         self.source_path = source
         self.basename = mozpath.basename(source)
         self.module = module
-
-        self.install_target = context['FINAL_TARGET']
 
 class Defines(ContextDerived):
     """Context derived container object for DEFINES, which is an OrderedDict.
@@ -368,6 +367,7 @@ class Linkable(ContextDerived):
         'defines',
         'linked_libraries',
         'linked_system_libs',
+        'library_name',
     )
 
     def __init__(self, context):
@@ -375,6 +375,7 @@ class Linkable(ContextDerived):
         self.linked_libraries = []
         self.linked_system_libs = []
         self.defines = Defines(context, {})
+        self.library_name = context.get('LIBRARY_NAME', None)
 
     def link_library(self, obj):
         assert isinstance(obj, BaseLibrary)
@@ -816,7 +817,6 @@ class InstallationTarget(ContextDerived):
     __slots__ = (
         'xpiname',
         'subdir',
-        'target',
         'enabled'
     )
 
@@ -825,7 +825,6 @@ class InstallationTarget(ContextDerived):
 
         self.xpiname = context.get('XPI_NAME', '')
         self.subdir = context.get('DIST_SUBDIR', '')
-        self.target = context['FINAL_TARGET']
         self.enabled = not context.get('NO_DIST_INSTALL', False)
 
     def is_custom(self):
@@ -845,12 +844,11 @@ class FinalTargetFiles(ContextDerived):
     this object fills that role. It just has a reference to the underlying
     HierarchicalStringList, which is created when parsing FINAL_TARGET_FILES.
     """
-    __slots__ = ('files', 'target')
+    __slots__ = ('files')
 
-    def __init__(self, sandbox, files, target):
+    def __init__(self, sandbox, files):
         ContextDerived.__init__(self, sandbox)
         self.files = files
-        self.target = target
 
 
 class GeneratedFile(ContextDerived):

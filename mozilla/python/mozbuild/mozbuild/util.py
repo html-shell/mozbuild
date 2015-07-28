@@ -370,74 +370,88 @@ def FlagsFactory(flags):
     assert isinstance(flags, dict)
     assert all(isinstance(v, type) for v in flags.values())
 
-    class Flags(object):
-        __slots__ = flags.keys()
-        _flags = flags
+    return Flags.make_parameterized(flags)
 
-        def update(self, **kwargs):
-            for k, v in kwargs.iteritems():
-                setattr(self, k, v)
 
-        def __getattr__(self, name):
-            if name not in self.__slots__:
-                raise AttributeError("'%s' object has no attribute '%s'" %
-                                     (self.__class__.__name__, name))
-            try:
-                return object.__getattr__(self, name)
-            except AttributeError:
-                value = self._flags[name]()
-                self.__setattr__(name, value)
-                return value
+class Flags(object):
+    def update(self, **kwargs):
+        for k, v in kwargs.iteritems():
+            setattr(self, k, v)
 
-        def __setattr__(self, name, value):
-            if name not in self.__slots__:
-                raise AttributeError("'%s' object has no attribute '%s'" %
-                                     (self.__class__.__name__, name))
-            if not isinstance(value, self._flags[name]):
-                raise TypeError("'%s' attribute of class '%s' must be '%s'" %
-                                (name, self.__class__.__name__,
-                                 self._flags[name].__name__))
-            return object.__setattr__(self, name, value)
+    def __getattr__(self, name):
+        if name not in self.__slots__:
+            raise AttributeError("'%s' object has no attribute '%s'" %
+                                 (self.__class__.__name__, name))
+        try:
+            return object.__getattr__(self, name)
+        except AttributeError:
+            value = self._flags[name]()
+            self.__setattr__(name, value)
+            return value
 
-        def __delattr__(self, name):
-            raise MozbuildDeletionError('Unable to delete attributes for this object')
+    def __setattr__(self, name, value):
+        if name not in self.__slots__:
+            raise AttributeError("'%s' object has no attribute '%s'" %
+                                 (self.__class__.__name__, name))
+        if not isinstance(value, self._flags[name]):
+            raise TypeError("'%s' attribute of class '%s' must be '%s'" %
+                            (name, self.__class__.__name__,
+                             self._flags[name].__name__))
+        return object.__setattr__(self, name, value)
 
-    return Flags
+    def __delattr__(self, name):
+        raise MozbuildDeletionError('Unable to delete attributes for this object')
+
+    @classmethod
+    def make_parameterized(cls, flags):
+        clsname = b"Flags.%s" % repr(flags)
+        if not(clsname in globals()):
+            # create a class, assign it as a global under the same name
+            globals()[clsname] = type(clsname, (cls,), dict(_flags = flags, __slots__ = flags.keys()))
+        return globals()[clsname]
 
 
 def StrictOrderingOnAppendListWithFlagsFactory(flags):
-    """Returns a StrictOrderingOnAppendList-like object, with optional
-    flags on each item.
+    return StrictOrderingOnAppendListWithFlags.make_parameterized(flags)
 
-    The flags are defined in the dict given as argument, where keys are
-    the flag names, and values the type used for the value of that flag.
 
-    Example:
-        FooList = StrictOrderingOnAppendListWithFlagsFactory({
-            'foo': bool, 'bar': unicode
-        })
-        foo = FooList(['a', 'b', 'c'])
-        foo['a'].foo = True
-        foo['b'].bar = 'bar'
-    """
-    class StrictOrderingOnAppendListWithFlags(StrictOrderingOnAppendList):
-        def __init__(self, iterable=[]):
-            StrictOrderingOnAppendList.__init__(self, iterable)
-            self._flags_type = FlagsFactory(flags)
-            self._flags = dict()
+"""Returns a StrictOrderingOnAppendList-like object, with optional
+flags on each item.
 
-        def __getitem__(self, name):
-            if name not in self._flags:
-                if name not in self:
-                    raise KeyError("'%s'" % name)
-                self._flags[name] = self._flags_type()
-            return self._flags[name]
+The flags are defined in the dict given as argument, where keys are
+the flag names, and values the type used for the value of that flag.
 
-        def __setitem__(self, name, value):
-            raise TypeError("'%s' object does not support item assignment" %
-                            self.__class__.__name__)
+Example:
+    FooList = StrictOrderingOnAppendListWithFlagsFactory({
+        'foo': bool, 'bar': unicode
+    })
+    foo = FooList(['a', 'b', 'c'])
+    foo['a'].foo = True
+    foo['b'].bar = 'bar'
+"""
+class StrictOrderingOnAppendListWithFlags(StrictOrderingOnAppendList):
+    def __init__(self, iterable=[]):
+        StrictOrderingOnAppendList.__init__(self, iterable)
+        self._flags_type = self.__class__._flags_type
+        self._flags = dict()
 
-    return StrictOrderingOnAppendListWithFlags
+    def __getitem__(self, name):
+        if name not in self._flags:
+            if name not in self:
+                raise KeyError("'%s'" % name)
+            self._flags[name] = self._flags_type()
+        return self._flags[name]
+
+    def __setitem__(self, name, value):
+        raise TypeError("'%s' object does not support item assignment" %
+                        self.__class__.__name__)
+    @classmethod
+    def make_parameterized(cls, flags):
+        clsname = b"StrictOrderingOnAppendListWithFlags.%s" % repr(flags)
+        if not(clsname in globals()):
+            # create a class, assign it as a global under the same name
+            globals()[clsname] = type(clsname, (cls,), dict(_flags_type = FlagsFactory(flags)))
+        return globals()[clsname]
 
 
 class HierarchicalStringList(object):
@@ -579,39 +593,49 @@ def HierarchicalStringListWithFlagsFactory(flags):
         foo.sub['x'].foo = False
         foo.sub['y'].bar = 'baz'
     """
-    class HierarchicalStringListWithFlags(HierarchicalStringList):
-        __flag_slots__ = ('_flags_type', '_flags')
+    return HierarchicalStringListWithFlags.make_parameterized(flags)
 
-        def __init__(self):
-            HierarchicalStringList.__init__(self)
-            self._flags_type = FlagsFactory(flags)
-            self._flags = dict()
 
-        def __setattr__(self, name, value):
-            if name in self.__flag_slots__:
-                return object.__setattr__(self, name, value)
-            HierarchicalStringList.__setattr__(self, name, value)
+class HierarchicalStringListWithFlags(HierarchicalStringList):
+    __flag_slots__ = ('_flags_type', '_flags')
 
-        def __getattr__(self, name):
-            if name in self.__flag_slots__:
-                return object.__getattr__(self, name)
-            return HierarchicalStringList.__getattr__(self, name)
+    def __init__(self):
+        HierarchicalStringList.__init__(self)
+        self._flags = dict()
+        self._flags_type = self.__class__._flags_type
 
-        def __getitem__(self, name):
-            if name not in self._flags:
-                if name not in self._strings:
-                    raise KeyError("'%s'" % name)
-                self._flags[name] = self._flags_type()
-            return self._flags[name]
+    def __setattr__(self, name, value):
+        if name in self.__flag_slots__:
+            return object.__setattr__(self, name, value)
+        HierarchicalStringList.__setattr__(self, name, value)
 
-        def __setitem__(self, name, value):
-            raise TypeError("'%s' object does not support item assignment" %
-                            self.__class__.__name__)
+    def __getattr__(self, name):
+        if name in self.__flag_slots__:
+            return object.__getattr__(self, name)
+        return HierarchicalStringList.__getattr__(self, name)
 
-        def _get_exportvariable(self, name):
-            return self._children.setdefault(name, HierarchicalStringListWithFlags())
+    def __getitem__(self, name):
+        if name not in self._flags:
+            if name not in self._strings:
+                raise KeyError("'%s'" % name)
+            self._flags[name] = self._flags_type()
+        return self._flags[name]
 
-    return HierarchicalStringListWithFlags
+    def __setitem__(self, name, value):
+        raise TypeError("'%s' object does not support item assignment" %
+                        self.__class__.__name__)
+
+    def _get_exportvariable(self, name):
+        return self._children.setdefault(name, self.__class__())
+
+    @classmethod
+    def make_parameterized(cls, flags):
+        clsname = b"HierarchicalStringListWithFlags.%s" % repr(flags)
+        if not(clsname in globals()):
+            # create a class, assign it as a global under the same name
+            globals()[clsname] = type(clsname, (cls,), dict(_flags_type = FlagsFactory(flags)))
+        return globals()[clsname]
+
 
 class LockFile(object):
     """LockFile is used by the lock_file method to hold the lock.
