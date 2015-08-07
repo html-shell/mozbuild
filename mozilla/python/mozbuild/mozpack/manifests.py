@@ -271,7 +271,7 @@ class InstallManifest(object):
 
            <base>/foo/bar.h -> <dest>/foo/bar.h
         """
-        self._add_pattern(base, pattern, dest, self.PATTERN_SYMLINK)
+        self._add_pattern(base, pattern, dest, self.PATTERN_COPY)
 
     def add_pattern_copy(self, base, pattern, dest):
         """Add a pattern match that results in copies.
@@ -327,6 +327,17 @@ class InstallManifest(object):
 
             if install_type in (self.PATTERN_SYMLINK, self.PATTERN_COPY):
                 _, base, pattern, dest = entry
+                if pattern.startswith('/'):
+                  patterns = mozpath.split(pattern)
+                  pattern = ''
+                  hasPattern = False
+                  for p in patterns:
+                    if '*' in p:
+                      hasPattern = True
+                    if hasPattern:
+                      pattern = mozpath.join(pattern, p)
+                    else:
+                      base = mozpath.join(base, p)
                 finder = FileFinder(base, find_executables=False)
                 paths = [f[0] for f in finder.find(pattern)]
 

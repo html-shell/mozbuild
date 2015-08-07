@@ -237,28 +237,27 @@ class InternalBackend(CommonBackend):
         self.backend_input_files.add(mozpath.join(obj.topsrcdir,
             obj.manifest_relpath))
 
-        test_manifests, reltarget = self._get_manifest_from_target('tests')
         # Don't allow files to be defined multiple times unless it is allowed.
         # We currently allow duplicates for non-test files or test files if
         # the manifest is listed as a duplicate.
         for source, (dest, is_test) in obj.installs.items():
             try:
-                test_manifests.add_symlink(source, mozpath.join(reltarget, dest))
+                self._install_manifests['tests'].add_symlink(source, dest)
             except ValueError:
                 if not obj.dupe_manifest and is_test:
                     raise
 
         for base, pattern, dest in obj.pattern_installs:
             try:
-                test_manifests.add_pattern_symlink(base,
-                    pattern, mozpath.join(reltarget, dest))
+                self._install_manifests['tests'].add_pattern_symlink(base,
+                    pattern, dest)
             except ValueError:
                 if not obj.dupe_manifest:
                     raise
 
         for dest in obj.external_installs:
             try:
-                test_manifests.add_optional_exists(mozpath.join(reltarget, dest))
+                self._install_manifests['tests'].add_optional_exists(dest)
             except ValueError:
                 if not obj.dupe_manifest:
                     raise
@@ -466,6 +465,9 @@ class InternalBackend(CommonBackend):
                 raise Exception('File listed in EXPORTS does not exist: %s' % source)
 
     def _process_javascript_modules(self, obj):
+        if obj.flavor not in ('extra', 'extra_pp', 'testing'):
+          raise Exception('Unsupported JavaScriptModules instance: %s' % obj.flavor)
+
         target = mozpath.join(obj.target, 'modules')
         if obj.flavor == 'extra':
             self._process_final_target_files(obj, obj.modules, target)
@@ -475,13 +477,13 @@ class InternalBackend(CommonBackend):
             self._process_final_target_files(obj, obj.modules, target, preprocessor=True)
             return
 
-        if obj.flavor == 'testing':
-            manifest, reltarget = self._get_manifest_from_target('tests')
-            for source, dest, _ in self._walk_hierarchy(obj, obj.modules):
-                manifest.add_symlink(source, mozpath.join(reltarget, 'modules', dest))
+        if not self.environment.substs.get('ENABLE_TESTS', False):
             return
 
-        raise Exception('Unsupported JavaScriptModules instance: %s' % obj.flavor)
+        manifest = self._install_manifests['tests']
+
+        for source, dest, _ in self._walk_hierarchy(obj, obj.modules):
+            manifest.add_symlink(source, mozpath.join('modules', dest))
 
     def _get_manifest_from_target(self, target):
         prefix_list = [
@@ -542,20 +544,23 @@ class InternalBackend(CommonBackend):
             self._process_files(obj, strings, mozpath.join(target, path), preprocessor=preprocessor, marker=marker)
 
     def _process_test_harness_files(self, obj):
-        test_manifest, reltarget = self._get_manifest_from_target('tests')
         for path, files in obj.srcdir_files.iteritems():
             for source in files:
                 dest = '%s/%s' % (path, mozpath.basename(source))
-                test_manifest.add_symlink(source, mozpath.join(reltarget, dest))
+                self._install_manifests['tests'].add_symlink(source, dest)
 
         for path, patterns in obj.srcdir_pattern_files.iteritems():
-            dest = mozpath.join(reltarget, path)
             for p in patterns:
-                test_manifest.add_pattern_symlink(obj.srcdir, p, dest)
+                if p[:1] == '/':
+                  self._install_manifests['tests'].add_pattern_symlink(obj.topsrcdir, p, path)
+                else:
+                  self._install_manifests['tests'].add_pattern_symlink(obj.srcdir, p, path)
 
         for path, files in obj.objdir_files.iteritems():
-            #TODO: no handle this time
-            pass
+            for source in files:
+                dest = '%s/%s' % (path, mozpath.basename(source))
+                print(source, mozpath.join(reltarget, dest))
+                test_manifest.add_symlink(source, mozpath.join(reltarget, dest))
 
     def _get_full_path(self, obj, filename):
         return mozpath.normpath(mozpath.join(obj.srcdir, filename))
@@ -641,6 +646,7 @@ class InternalBackend(CommonBackend):
         for dist_item in dist_list:
             dist_manifest.add_symlink(mozpath.join(sdk_path, dist_item), mozpath.join(target, dist_item))
 
+        dist_manifest.add_optional_exists(mozpath.join(target, 'bin/.purgecaches'))
         dist_manifest.add_optional_exists(mozpath.join(target, 'bin/wpsmail.exe'))
         dist_manifest.add_optional_exists(mozpath.join(target, 'lib/wpsmail.pdb'))
 
@@ -675,7 +681,23 @@ class InternalBackend(CommonBackend):
 
         chrome_files = sorted([mozpath.relpath(p, self.environment.topobjdir) for p in self._chrome_set])
         self._process_files(None, chrome_files, '', optional=True)
+
+        # Make the master test manifest files.
+        for flavor, t in self._test_manifests.items():
+            install_prefix, manifests = t
+            manifest_stem = mozpath.join(install_prefix, '%s.ini' % flavor)
+            self._write_master_test_manifest(mozpath.join(
+                self.environment.topobjdir, '_tests', manifest_stem),
+                manifests)
+
+            # Catch duplicate inserts.
+            try:
+                self._install_manifests['tests'].add_optional_exists(manifest_stem)
+            except ValueError:
+                pass
+
         self._write_manifests('install', self._install_manifests)
+
         ensureParentDir(mozpath.join(self.environment.topobjdir, 'dist', 'foo'))
         savePickle(self.all_configs_path, self.all_configs)
         self.build()
@@ -696,6 +718,13 @@ class InternalBackend(CommonBackend):
 
         purger.purge(man_dir)
 
+    def _write_master_test_manifest(self, path, manifests):
+        with self._write_file(path) as master:
+            master.write(
+                '; THIS FILE WAS AUTOMATICALLY GENERATED. DO NOT MODIFY BY HAND.\n\n')
+
+            for manifest in sorted(manifests):
+                master.write('[include:%s]\n' % manifest)
     def _get_xpt_path_from_idl_module(self, manager, module):
         install_target, _ = manager.modules[module]
         return mozpath.join(install_target, 'components', module + '.xpt')
@@ -819,18 +848,18 @@ class InternalBackend(CommonBackend):
 
     def build(self):
         print("Start building")
-        manifest_list = [
-            'build',
-            'dist',
-            'tests',
-        ]
+        manifest_install = {
+            'build': 'build',
+            'dist': 'dist',
+            'tests': '_tests',
+        }
 
         COMPLETE = 'From {dest}: Kept {existing} existing; Added/updated {updated}; ' \
             'Removed {rm_files} files and {rm_dirs} directories.'
 
         config = self.environment
-        for d in manifest_list:
-            dest_dir = mozpath.join(config.topobjdir, d)
+        for d in sorted(manifest_install.keys()):
+            dest_dir = mozpath.join(config.topobjdir, manifest_install[d])
             manifests_filepath = mozpath.join(self.manifests_root, d)
             result = process_manifest(dest_dir, [manifests_filepath], remove_all_directory_symlinks=False)
             print(COMPLETE.format(dest=dest_dir,
