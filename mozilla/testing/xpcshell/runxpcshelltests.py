@@ -1222,7 +1222,7 @@ class XPCShellTests(object):
         if self.jsDebuggerInfo:
             # The js debugger magic needs more work to do the right thing
             # if debugging multiple files.
-            if len(self.alltests) != 1:
+            if len(self.alltests) != 1 and not self.testPath:
                 self.log.error("Error: --jsdebugger can only be used with a single test!")
                 return False
 

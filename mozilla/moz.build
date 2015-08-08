@@ -6,4 +6,5 @@ DIRS += [
 
 TEST_DIRS += [
     'testing/modules',
+    'testing/xpcshell',
 ]
