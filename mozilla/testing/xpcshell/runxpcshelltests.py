@@ -589,8 +589,6 @@ class XPCShellTestThread(Thread):
             rel_app_dir = self.test_object[self.app_dir_key]
             rel_app_dir = os.path.join(self.xrePath, rel_app_dir)
             self.appPath = os.path.abspath(rel_app_dir)
-        else:
-            self.appPath = None
 
         test_dir = os.path.dirname(path)
         self.buildXpcsCmd(test_dir)
