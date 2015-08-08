@@ -3,3 +3,4 @@
 * text=auto eol=lf
 
 /mozilla/**/* binary
+/mozilla/python/**/* text=auto eol=lf
