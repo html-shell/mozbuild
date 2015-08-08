@@ -3,3 +3,7 @@ include('build/templates.mozbuild')
 DIRS += [
   '../geckosdk'
 ]
+
+TEST_DIRS += [
+    'testing/modules',
+]
