@@ -958,6 +958,9 @@ class InternalBackend(CommonBackend):
                 depPath = mozpath.join(self.libxul_sdk,'idl', depFilename)
             outDeps.add(depPath)
 
+    def full_build(self):
+        self._init_with(self.init_all_configs)
+
     def try_build(self):
         buildFinished = True
         cpu_start = time.clock()
@@ -970,7 +973,7 @@ class InternalBackend(CommonBackend):
             buildFinished = False
 
         if not buildFinished:
-            self._init_with(self.init_all_configs)
+            self.full_build();
         else:
             cpu_time = time.clock() - cpu_start
             print('Building time is:' + str(cpu_time) + ' seconds')

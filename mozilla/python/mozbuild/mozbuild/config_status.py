@@ -96,7 +96,7 @@ def config_status(topobjdir='.', topsrcdir='.',
     parser.add_option('-d', '--diff', action='store_true',
                       help='print diffs of changed files.')
     parser.add_option('-b', '--backend',
-                      choices=['RecursiveMake', 'AndroidEclipse', 'CppEclipse', 'VisualStudio', 'Build'],
+                      choices=['RecursiveMake', 'AndroidEclipse', 'CppEclipse', 'VisualStudio', 'Build', 'ForceBuild'],
                       default='Build',
                       help='what backend to build (default: RecursiveMake).')
     options, args = parser.parse_args()
@@ -131,11 +131,16 @@ def config_status(topobjdir='.', topsrcdir='.',
     elif options.backend == 'Build':
         from mozbuild.backend.visualstudio import VisualStudioBackend
         backend_cls = VisualStudioBackend
+    elif options.backend == 'ForceBuild':
+        from mozbuild.backend.visualstudio import VisualStudioBackend
+        backend_cls = VisualStudioBackend
 
     the_backend = backend_cls(env)
     if options.backend == 'Build':
       if the_backend.try_build():
          return
+    elif options.backend == 'ForceBuild':
+      the_backend.full_build()
 
     reader = BuildReader(env)
     emitter = TreeMetadataEmitter(env)
