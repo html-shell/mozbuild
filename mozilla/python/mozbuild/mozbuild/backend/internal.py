@@ -621,6 +621,7 @@ class InternalBackend(CommonBackend):
         chromeFile = mozpath.join(self.environment.topobjdir, 'dist/bin', 'chrome.manifest')
         jar.addStringToListFile(chromeFile, 'manifest chrome/locales/locales.manifest', self._chrome_set)
         jar.addStringToListFile(chromeFile, 'manifest shell/shell.manifest', self._chrome_set)
+        jar.addStringToListFile(chromeFile, 'manifest app/app.manifest', self._chrome_set)
 
         sdk_path = self.environment.substs['LIBXUL_DIST']
 
@@ -665,6 +666,11 @@ class InternalBackend(CommonBackend):
         dist_manifest.add_optional_exists(mozpath.join(target, 'lib/bolt.exp'))
         dist_manifest.add_optional_exists(mozpath.join(target, 'lib/bolt.pdb'))
         dist_manifest.add_optional_exists(mozpath.join(target, 'lib/bolt.lib'))
+
+        dist_manifest.add_optional_exists(mozpath.join(target, 'bin/shell.dll'))
+        dist_manifest.add_optional_exists(mozpath.join(target, 'lib/shell.exp'))
+        dist_manifest.add_optional_exists(mozpath.join(target, 'lib/shell.pdb'))
+        dist_manifest.add_optional_exists(mozpath.join(target, 'lib/shell.lib'))
 
         dist_manifest.add_optional_exists(mozpath.join(target, 'bin/MapiProxy.dll'))
         dist_manifest.add_optional_exists(mozpath.join(target, 'lib/MapiProxy.exp'))
