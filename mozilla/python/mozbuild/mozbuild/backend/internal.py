@@ -621,7 +621,6 @@ class InternalBackend(CommonBackend):
         chromeFile = mozpath.join(self.environment.topobjdir, 'dist/bin', 'chrome.manifest')
         jar.addStringToListFile(chromeFile, 'manifest chrome/locales/locales.manifest', self._chrome_set)
         jar.addStringToListFile(chromeFile, 'manifest shell/shell.manifest', self._chrome_set)
-        jar.addStringToListFile(chromeFile, 'manifest app/chrome.manifest', self._chrome_set)
 
         sdk_path = self.environment.substs['LIBXUL_DIST']
 
@@ -650,6 +649,8 @@ class InternalBackend(CommonBackend):
         dist_manifest.add_optional_exists(mozpath.join(target, 'bin/.purgecaches'))
         dist_manifest.add_optional_exists(mozpath.join(target, 'bin/wpsmail.exe'))
         dist_manifest.add_optional_exists(mozpath.join(target, 'lib/wpsmail.pdb'))
+
+        dist_manifest.add_optional_exists(mozpath.join(target, 'bin/app.xpi'))
 
         dist_manifest.add_optional_exists(mozpath.join(target, 'bin/helper.exe'))
         dist_manifest.add_optional_exists(mozpath.join(target, 'lib/helper.pdb'))
