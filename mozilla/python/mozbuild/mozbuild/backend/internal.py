@@ -619,7 +619,6 @@ class InternalBackend(CommonBackend):
                     continue
                 jar.addStringToListFile(chromeFile, 'manifest components/%s' % manifestName, self._chrome_set)
         chromeFile = mozpath.join(self.environment.topobjdir, 'dist/bin', 'chrome.manifest')
-        jar.addStringToListFile(chromeFile, 'manifest chrome/locales/locales.manifest', self._chrome_set)
         jar.addStringToListFile(chromeFile, 'manifest shell/shell.manifest', self._chrome_set)
 
         sdk_path = self.environment.substs['LIBXUL_DIST']
